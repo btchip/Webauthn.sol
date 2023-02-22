@@ -370,6 +370,66 @@ library EllipticCurve {
         return toAffinePoint(x1, y1, z1);
     }
 
+ /**
+     * @dev Double base multiplication using windowing and Shamir's trick
+     */
+    function ec_mulmuladd(
+        uint Gx0,
+        uint Gy0,
+        uint Qx0,
+        uint Qy0,
+        uint scalar_u,
+        uint scalar_v
+    ) internal pure returns (uint[3] memory R) {
+        
+      /*1. Precomputation steps: 2 bits window+shamir */  
+      /* precompute all aG+bQ in [0..3][0..3]*/
+      uint [3][16] memory Window;
+      Window[1][0]=Gx0;
+      Window[1][1]=Gy0;
+      Window[1][2]=1;
+      
+      Window[2][0]=Qx0;
+      Window[2][1]=Qy0;
+      Window[2][2]=1;
+
+      (Window[3][0], Window[3][1], Window[3][2])=addProj(Gx0, Gy0, 1, Qx0, Gy0, 1); //3:G+Q
+      (Window[4][0], Window[4][1], Window[4][2])=twiceProj(Gx0, Gy0, 1);//4:2G
+      (Window[5][0], Window[5][1], Window[5][2])=addProj(Gx0, Gy0, 1, Window[4][0], Window[4][1], Window[4][2]); //5:3G
+      (Window[6][0], Window[6][1], Window[6][2])=addProj(Qx0, Qy0, 1, Window[4][0], Window[4][1], Window[4][2]); //6:2G+Q
+      (Window[7][0], Window[7][1], Window[7][2])=addProj(Qx0, Qy0, 1, Window[5][0], Window[5][1], Window[5][2]); //7:3G+Q
+      (Window[8][0], Window[8][1], Window[8][2])=twiceProj(Window[4][0], Window[4][1], Window[4][2]);//8:4G
+     
+      (Window[9][0], Window[9][1], Window[9][2])=addProj(Gx0, Gy0, 1, Window[8][0], Window[8][1], Window[8][2]);//9:2Q+G
+      (Window[10][0], Window[10][1], Window[10][2])=addProj(Qx0, Qy0, 1, Window[8][0], Window[8][1], Window[8][2]);//10:3Q
+      (Window[11][0], Window[11][1], Window[11][2])=addProj(Gx0, Gy0, 1, Window[10][0], Window[10][1], Window[10][2]); //11:3Q+G
+      (Window[12][0], Window[12][1], Window[12][2])=addProj(Window[8][0], Window[8][1], Window[8][2] , Window[4][0], Window[4][1], Window[4][2]); //12:2Q+2G
+      (Window[13][0], Window[13][1], Window[13][2])=addProj(Window[8][0], Window[8][1], Window[8][2] , Window[5][0], Window[5][1], Window[5][2]); //13:2Q+3G
+      (Window[14][0], Window[14][1], Window[14][2])=addProj(Window[10][0], Window[10][1], Window[10][2], Window[4][0], Window[4][1], Window[4][2]); //14:3Q+2G
+      (Window[15][0], Window[15][1], Window[15][2])=addProj(Window[10][0], Window[10][1], Window[10][2],  Window[5][0], Window[5][1], Window[5][2]); //15:3Q+3G
+    
+    
+     //initialize R with infinity point
+      R[0]=0;
+      R[1]=0;
+      R[2]=0;
+     uint quadbit=1;
+     //2. loop over scalars from MSB to LSB:
+     for(uint8 i=0;i<128;i++)
+     {
+       uint8 rshift=255-2*i; 
+       (R[0],R[1],R[2])=twiceProj(R[0],R[1],R[2]);//double
+       (R[0],R[1],R[2])=twiceProj(R[0],R[1],R[2]);//double
+       
+     //compute quadruple (8*v1 +4*u1+ 2*v0 + u0)
+      	quadbit=8*((scalar_u>>rshift)&1)+ 4*((scalar_u>>rshift)&1)+ 2*((scalar_v>>(rshift-1))&1)+ ((scalar_u >>(rshift-1))&1);
+        (R[0],R[1],R[2])=addProj(R[0],R[1],R[2], Window[quadbit][0], Window[quadbit][1], Window[quadbit][2]);     
+     }
+     
+      return R;
+    }
+
+
     /**
      * @dev Multiply the curve's generator point by a scalar.
      */
@@ -402,9 +462,20 @@ library EllipticCurve {
         uint y2;
 
         uint sInv = inverseMod(rs[1], n);
+        
+        // without Optim
+        /*
         (x1, y1) = multiplyScalar(gx, gy, mulmod(uint(message), sInv, n));
         (x2, y2) = multiplyScalar(Q[0], Q[1], mulmod(rs[0], sInv, n));
         uint[3] memory P = addAndReturnProjectivePoint(x1, y1, x2, y2);
+        */
+        
+        uint scalar_v=mulmod(uint(message), sInv, n);
+        uint scalar_u= mulmod(rs[0], sInv, n);
+ 	uint[3] memory P = ec_mulmuladd(gx, gy, Q[0], Q[1],scalar_v ,scalar_u );
+ 	
+	
+
 
         if (P[2] == 0) {
             return false;
