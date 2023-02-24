@@ -20,7 +20,7 @@ contract Webauthn {
         uint clientChallengeDataOffset,
         uint[2] memory rs,
         uint[2] memory Q
-    ) public view returns (bool) {
+    ) public  returns (bool) {
         // Let the caller check if User Presence (0x01) or User Verification (0x04) are set
         if (
             (authenticatorData[32] & authenticatorDataFlagMask) !=
@@ -65,7 +65,10 @@ contract Webauthn {
             authenticatorData.length
         );
         bytes32 message = sha256(verifyData);
-        return EllipticCurve.validateSignature(message, rs, Q);
+	bool result=EllipticCurve.validateSignature(message, rs, Q);
+	console.log("result= %s", result);
+
+        return result;
     }
 
     function validate(

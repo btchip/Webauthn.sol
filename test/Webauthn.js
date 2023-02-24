@@ -39,19 +39,20 @@ describe("Webauthn", function() {
     const challengeOffset = clientData.indexOf("226368616c6c656e6765223a", 0, "hex") + 12 + 1;    
     const signatureParsed = derToRS(signature);
 
+	/*
     const result = await webauthn.checkSignature(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
         [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))],
         [ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]
     );
     expect(result);
-
-    /*
+*/
+    
     const result = await webauthn.validate(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
         [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))],
         [ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]
     );
     await result.wait();
-    */
+    
 
   })
 });

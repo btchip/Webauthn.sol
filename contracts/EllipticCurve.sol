@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+
 /**
  * @title   EllipticCurve
  *
@@ -15,6 +16,8 @@ pragma solidity ^0.8.0;
  * @dev     NOTE: To disambiguate public keys when verifying signatures, activate
  *          condition 'rs[1] > lowSmax' in validateSignature().
  */
+ import "hardhat/console.sol";
+
 library EllipticCurve {
     // Set parameters for curve.
     uint constant a =
@@ -71,6 +74,40 @@ library EllipticCurve {
         }
     }
 
+
+    function toZZPoint(
+        uint x0,
+        uint y0
+    ) internal pure returns (uint[4] memory P) {
+        unchecked {
+            P[2] = 1; //ZZ
+            P[3] = 1; //ZZZ
+            P[0] = x0;
+            P[1] = y0;
+        }
+    }
+    
+    
+    function submod(uint x, uint y) internal pure returns (uint xmy)
+    {
+      return addmod(x, p-a,p);
+    }
+    
+    function ecZZ_Dbl(
+    	uint x,
+        uint y,
+        uint zz,
+        uint zzz
+    ) internal pure returns (uint[4] memory P)
+    {
+     P[0]=mulmod(2, y, p); //U = 2*Y1
+     P[1]=mulmod(P[0],P[0],p); // V=U^2
+     P[2]=mulmod(P[0], P[1],p); // W=UV
+     P[3]=mulmod(x, P[1],p); // S = X1*V
+     //M=3*(X1-ZZ1)*(X1+ZZ1)
+     //TBD
+    }
+    
     /**
      * @dev Add two points in affine coordinates and return projective point.
      */
@@ -103,6 +140,7 @@ library EllipticCurve {
             y1 = mulmod(y0, z0Inv, p);
         }
     }
+  
 
     /**
      * @dev Return the zero curve in projective coordinates.
@@ -119,14 +157,22 @@ library EllipticCurve {
     }
 
     /**
-     * @dev Check if the curve is the zero curve.
+     * @dev Check if the curve is the zero curve in affine rep.
      */
-    function isZeroCurve(uint x0, uint y0) internal pure returns (bool isZero) {
+    function isZeroCurve_affine(uint x0, uint y0) internal pure returns (bool isZero) {
         if (x0 == 0 && y0 == 0) {
             return true;
         }
         return false;
     }
+    
+     function isZeroCurve_proj(uint x0, uint y0, uint z0) internal pure returns (bool isZero) {
+        if ( (x0 == 0) && (y0 == 1) && (z0==0) ) {
+            return true;
+        }
+        return false;
+    }
+    
 
     /**
      * @dev Check if a point in affine coordinates is on the curve.
@@ -164,7 +210,7 @@ library EllipticCurve {
         uint v;
         uint w;
 
-        if (isZeroCurve(x0, y0)) {
+        if (isZeroCurve_proj(x0, y0, z0)) {
             return zeroProj();
         }
         unchecked {
@@ -217,11 +263,13 @@ library EllipticCurve {
         uint u0;
         uint u1;
 
-        if (isZeroCurve(x0, y0)) {
+        if (isZeroCurve_proj(x0, y0, z0)) {
             return (x1, y1, z1);
-        } else if (isZeroCurve(x1, y1)) {
+       
+        } else if (isZeroCurve_proj(x1, y1, z1)) {
             return (x0, y0, z0);
         }
+      	
         unchecked {
             t0 = mulmod(y0, z1, p);
             t1 = mulmod(y1, z0, p);
@@ -239,6 +287,8 @@ library EllipticCurve {
         unchecked {
             (x2, y2, z2) = addProj2(mulmod(z0, z1, p), u0, u1, t1, t0);
         }
+        
+     
     }
 
     /**
@@ -335,7 +385,7 @@ library EllipticCurve {
         uint x0,
         uint y0,
         uint scalar
-    ) internal pure returns (uint x1, uint y1) {
+    ) internal  returns (uint x1, uint y1) {
         if (scalar == 0) {
             return zeroAffine();
         } else if (scalar == 1) {
@@ -355,6 +405,7 @@ library EllipticCurve {
             x1 = y1 = 0;
         }
 
+	unchecked{
         scalar = scalar >> 1;
 
         while (scalar > 0) {
@@ -366,25 +417,46 @@ library EllipticCurve {
 
             scalar = scalar >> 1;
         }
-
+	}
         return toAffinePoint(x1, y1, z1);
     }
 
+
+   function NormalizedX(  uint Gx0, uint Gy0, uint Gz0) internal returns(uint px)
+   {
+       if (Gz0 == 0) {
+            return 0;
+        }
+
+        uint Px = inverseMod(Gz0, p);
+        unchecked {
+            Px = mulmod(Gx0, Px, p);
+        }
+        return Px;
+   }
+   
  /**
-     * @dev Double base multiplication using windowing and Shamir's trick
+     * @dev Double base multiplication using windowing and Shamir's trick, imported from https://github.com/rdubois-crypto/MyCairoPlayground/blob/main/Cairo/cairo_secp256r1/src/ec_mulmuladd_secp256r1.cairo
+       Shamir's trick:https://crypto.stackexchange.com/questions/99975/strauss-shamir-trick-on-ec-multiplication-by-scalar,
+       Windowing method : https://en.wikipedia.org/wiki/Exponentiation_by_squaring, section 'sliding window'
+       The implementation uses a 2 bits window with trick, leading to a 16 points elliptic point precomputation
      */
-    function ec_mulmuladd(
+    function ec_mulmuladd_W(
         uint Gx0,
         uint Gy0,
         uint Qx0,
         uint Qy0,
         uint scalar_u,
         uint scalar_v
-    ) internal pure returns (uint[3] memory R) {
+    ) internal  returns (uint[3] memory R) {
         
-      /*1. Precomputation steps: 2 bits window+shamir */  
-      /* precompute all aG+bQ in [0..3][0..3]*/
+      //1. Precomputation steps: 2 bits window+shamir   
+      // precompute all aG+bQ in [0..3][0..3]
       uint [3][16] memory Window;
+      
+     (Window[0][0], Window[0][1], Window[0][2])= zeroProj();
+      
+      
       Window[1][0]=Gx0;
       Window[1][1]=Gy0;
       Window[1][2]=1;
@@ -393,12 +465,12 @@ library EllipticCurve {
       Window[2][1]=Qy0;
       Window[2][2]=1;
 
-      (Window[3][0], Window[3][1], Window[3][2])=addProj(Gx0, Gy0, 1, Qx0, Gy0, 1); //3:G+Q
+      (Window[3][0], Window[3][1], Window[3][2])=addProj(Gx0, Gy0, 1, Qx0, Qy0, 1); //3:G+Q
       (Window[4][0], Window[4][1], Window[4][2])=twiceProj(Gx0, Gy0, 1);//4:2G
       (Window[5][0], Window[5][1], Window[5][2])=addProj(Gx0, Gy0, 1, Window[4][0], Window[4][1], Window[4][2]); //5:3G
       (Window[6][0], Window[6][1], Window[6][2])=addProj(Qx0, Qy0, 1, Window[4][0], Window[4][1], Window[4][2]); //6:2G+Q
       (Window[7][0], Window[7][1], Window[7][2])=addProj(Qx0, Qy0, 1, Window[5][0], Window[5][1], Window[5][2]); //7:3G+Q
-      (Window[8][0], Window[8][1], Window[8][2])=twiceProj(Window[4][0], Window[4][1], Window[4][2]);//8:4G
+      (Window[8][0], Window[8][1], Window[8][2])=twiceProj(Qx0, Qy0, 1);//8:2Q
      
       (Window[9][0], Window[9][1], Window[9][2])=addProj(Gx0, Gy0, 1, Window[8][0], Window[8][1], Window[8][2]);//9:2Q+G
       (Window[10][0], Window[10][1], Window[10][2])=addProj(Qx0, Qy0, 1, Window[8][0], Window[8][1], Window[8][2]);//10:3Q
@@ -410,32 +482,89 @@ library EllipticCurve {
     
     
      //initialize R with infinity point
-      R[0]=0;
-      R[1]=0;
-      R[2]=0;
+     (R[0],R[1],R[2])= zeroProj();
+     
      uint quadbit=1;
      //2. loop over scalars from MSB to LSB:
+     unchecked{
      for(uint8 i=0;i<128;i++)
      {
-       uint8 rshift=255-2*i; 
+       uint8 rshift=255-(2*i); 
        (R[0],R[1],R[2])=twiceProj(R[0],R[1],R[2]);//double
        (R[0],R[1],R[2])=twiceProj(R[0],R[1],R[2]);//double
        
      //compute quadruple (8*v1 +4*u1+ 2*v0 + u0)
-      	quadbit=8*((scalar_u>>rshift)&1)+ 4*((scalar_u>>rshift)&1)+ 2*((scalar_v>>(rshift-1))&1)+ ((scalar_u >>(rshift-1))&1);
+      	quadbit=8*((scalar_v>>rshift)&1)+ 4*((scalar_u>>rshift)&1)+ 2*((scalar_v>>(rshift-1))&1)+ ((scalar_u >>(rshift-1))&1);
+      	
+      
         (R[0],R[1],R[2])=addProj(R[0],R[1],R[2], Window[quadbit][0], Window[quadbit][1], Window[quadbit][2]);     
+        
+     }
      }
      
       return R;
     }
 
 
+    function ec_mulmuladd_S(
+        uint Gx0,
+        uint Gy0,
+        uint Qx0,
+        uint Qy0,
+        uint scalar_u,
+        uint scalar_v
+    ) internal   returns (uint[3] memory R) {
+
+	uint[3] memory H;//G+Q
+	(H[0],H[1], H[2] )=addProj(Gx0, Gy0, 1, Qx0, Qy0, 1);
+	
+		console.log("H=", H[0], H[1], H[2]);
+     
+     
+	uint dibit;
+	
+      //initialize R with infinity point
+     (R[0],R[1],R[2])= zeroProj();
+     
+     unchecked {
+      for(uint index=0;index<256;index ++)
+      {
+      
+       uint i=255-index; 
+        
+     	if (isZeroCurve_proj(R[0],R[1],R[2])){
+        }
+        
+        
+       (R[0],R[1],R[2])=twiceProj(R[0],R[1],R[2]);//double
+     
+     	if (isZeroCurve_proj(R[0],R[1],R[2])){
+        }
+        
+     	dibit=((scalar_u>>i)&1)+2*((scalar_v>>i)&1);
+
+     	if(dibit==1){
+     	 (R[0],R[1],R[2])= addProj(R[0],R[1],R[2],Gx0, Gy0, 1);
+        }
+        if(dibit==2){
+     	 (R[0],R[1],R[2])= addProj(R[0],R[1],R[2],Qx0, Qy0, 1);
+        }
+        if(dibit==3){
+         
+  	 (R[0],R[1],R[2])= addProj(R[0],R[1],R[2],H[0],H[1], H[2]);
+	}
+     }
+     }
+      return R;
+    }
+    
+    
     /**
      * @dev Multiply the curve's generator point by a scalar.
      */
     function multipleGeneratorByScalar(
         uint scalar
-    ) internal pure returns (uint, uint) {
+    ) internal  returns (uint, uint) {
         return multiplyScalar(gx, gy, scalar);
     }
 
@@ -446,7 +575,7 @@ library EllipticCurve {
         bytes32 message,
         uint[2] memory rs,
         uint[2] memory Q
-    ) internal pure returns (bool) {
+    ) internal  returns (bool) {
         // To disambiguate between public key solutions, include comment below.
         if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
             // || rs[1] > lowSmax)
@@ -455,37 +584,32 @@ library EllipticCurve {
         if (!isOnCurve(Q[0], Q[1])) {
             return false;
         }
+  	
+      
 
-        uint x1;
+        uint sInv = inverseMod(rs[1], n);
+        uint scalar_u=mulmod(uint(message), sInv, n);
+        uint scalar_v= mulmod(rs[0], sInv, n);
+ 		
+        // without Optim
+        
+      
+ 	/*
+ 	uint x1;
         uint x2;
         uint y1;
         uint y2;
-
-        uint sInv = inverseMod(rs[1], n);
-        
-        // without Optim
-        /*
-        (x1, y1) = multiplyScalar(gx, gy, mulmod(uint(message), sInv, n));
-        (x2, y2) = multiplyScalar(Q[0], Q[1], mulmod(rs[0], sInv, n));
+        (x1, y1) = multiplyScalar(gx, gy, scalar_u);
+        (x2, y2) = multiplyScalar(Q[0], Q[1], scalar_v);
         uint[3] memory P = addAndReturnProjectivePoint(x1, y1, x2, y2);
+        
+        console.log("res naive:", P [0], P[1], P[2]);
         */
         
-        uint scalar_v=mulmod(uint(message), sInv, n);
-        uint scalar_u= mulmod(rs[0], sInv, n);
- 	uint[3] memory P = ec_mulmuladd(gx, gy, Q[0], Q[1],scalar_v ,scalar_u );
+        /* choose ec_mulmuladd_W (higher deploiement, lower verification) or ec_mulmuladd_S (lower deploiement, higher verification cost)*/
+	uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
+ 	uint Px=NormalizedX(P[0], P[1], P[2]);
  	
-	
-
-
-        if (P[2] == 0) {
-            return false;
-        }
-
-        uint Px = inverseMod(P[2], p);
-        unchecked {
-            Px = mulmod(P[0], mulmod(Px, Px, p), p);
-        }
-
         return Px % n == rs[0];
     }
 }
