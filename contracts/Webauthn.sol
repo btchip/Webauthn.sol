@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Base64URL} from "./Base64URL.sol";
-import {EllipticCurve} from "./EllipticCurve.sol";
+import {Ec_ZZ} from "./Elliptic_ZZ.sol";
 import "hardhat/console.sol";
 
 error InvalidAuthenticatorData();
@@ -65,7 +65,7 @@ contract Webauthn {
             authenticatorData.length
         );
         bytes32 message = sha256(verifyData);
-	bool result=EllipticCurve.validateSignature(message, rs, Q);
+	bool result=Ec_ZZ.validateSignature(message, rs, Q);
 	console.log("result= %s", result);
 
         return result;

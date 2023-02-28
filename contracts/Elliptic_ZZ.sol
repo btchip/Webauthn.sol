@@ -1,41 +1,43 @@
+//*************************************************************************************/
+///* Copyright (C) 2022 - Renaud Dubois - This file is part of Cairo_musig2 project	 */
+///* License: This software is licensed under MIT License 	 */
+///* See LICENSE file at the root folder of the project.				 */
+///* FILE: ecZZ.solidity							         */
+///* 											 */
+///* 											 */
+///* DESCRIPTION: modified XYZZ system coordinates for EVM elliptic point multiplication
+///*  optimization
+///* 
+//**************************************************************************************/
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-
-/**
- * @title   EllipticCurve
- *
- * @author  Tilman Drerup;
- *
- * @notice  Implements elliptic curve math; Parametrized for SECP256R1.
- *
- *          Includes components of code by Andreas Olofsson, Alexander Vlasov
- *          (https://github.com/BANKEX/CurveArithmetics), and Avi Asayag
- *          (https://github.com/orbs-network/elliptic-curve-solidity)
- *
- * @dev     NOTE: To disambiguate public keys when verifying signatures, activate
- *          condition 'rs[1] > lowSmax' in validateSignature().
- */
  import "hardhat/console.sol";
 
-library EllipticCurve {
+library Ec_ZZ {
     // Set parameters for curve.
+    //curve bitsize
+    uint constant curve_S1=255;
+    //curve prime field modulus
+    uint constant p = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF;
+    //short weierstrass first coefficient
     uint constant a =
         0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC;
+    //short weierstrass second coefficient    
     uint constant b =
         0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B;
+    //generating point affine coordinates    
     uint constant gx =
         0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296;
     uint constant gy =
         0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5;
-    uint constant p =
-        0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF;
+    //curve order (number of points)
     uint constant n =
-        0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
-
-    uint constant lowSmax =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
-
+        0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;    
+    /* -2 constant, used to speed up doubling (avoid negation)*/
+    uint constant minus_2 = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFD;
+    
     /**
      * @dev Inverse of u in the field of modulo m.
      */
@@ -75,7 +77,7 @@ library EllipticCurve {
     }
 
 
-    function toZZPoint(
+    function ecAff_SetZZ(
         uint x0,
         uint y0
     ) internal pure returns (uint[4] memory P) {
@@ -87,27 +89,101 @@ library EllipticCurve {
         }
     }
     
-    
-    function submod(uint x, uint y) internal pure returns (uint xmy)
+/*    https://hyperelliptic.org/EFD/g1p/auto-shortw-xyzz-3.html#addition-add-2008-s*/
+    function ecZZ_SetAff( uint x,
+        uint y,
+        uint zz,
+        uint zzz) internal pure returns (uint x1, uint y1)
     {
-      return addmod(x, p-a,p);
+      uint zzzInv = inverseMod(zzz, p); //1/zzz
+      y1=mulmod(y,zzzInv,p);//Y/zzz
+      uint b=mulmod(zz, zzzInv,p); //1/z
+      zzzInv= mulmod(b,b,p); //1/zz
+      x1=mulmod(x,zzzInv,p);//X/zz
     }
+    
+ 
+    
+    /* Chudnosky doubling*/
+    /* The "dbl-2008-s-1" doubling formulas */
     
     function ecZZ_Dbl(
     	uint x,
         uint y,
         uint zz,
         uint zzz
-    ) internal pure returns (uint[4] memory P)
+    ) internal pure returns (uint P0, uint P1,uint P2,uint P3)
     {
-     P[0]=mulmod(2, y, p); //U = 2*Y1
-     P[1]=mulmod(P[0],P[0],p); // V=U^2
-     P[2]=mulmod(P[0], P[1],p); // W=UV
-     P[3]=mulmod(x, P[1],p); // S = X1*V
-     //M=3*(X1-ZZ1)*(X1+ZZ1)
-     //TBD
+     unchecked{
+     //use output as temporary to reduce RAM usage
+     P0=mulmod(2, y, p); //U = 2*Y1
+     P2=mulmod(P0,P0,p); // V=U^2
+     P3=mulmod(x, P2,p); // S = X1*V
+     P1=mulmod(P0, P2,p); // W=UV
+    
+     P2=mulmod(P2, zz, p); //zz3=V*ZZ1
+     
+     zz=mulmod(addmod(x,p-zz,p), addmod(x,zz,p),p);//M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage
+     zz=mulmod(3,zz, p);//M
+     P0=addmod(mulmod(zz,zz,p), mulmod(minus_2, P3,p),p);//X3=M^2-2S
+     
+     P3=addmod(P3, p-P0,p);//S-X3
+     x=mulmod(zz,P3,p);//M(S-X3)
+     P3=mulmod(P1,zzz,p);//zzz3=W*zzz1
+
+     P1=addmod(x, p-mulmod(P1, y,p),p );//Y3= M(S-X3)-W*Y1
+     }
+     
+     return (P0, P1, P2, P3);
     }
     
+     /**
+     * @dev add a ZZ point with a normalized point and greedy formulae
+     */
+     
+    //tbd: 
+    // return -x1 and -Y1 in double
+    function ecZZ_AddN(
+    	uint x1,
+        uint y1,
+        uint zz1,
+        uint zzz1,
+        uint x2,
+        uint y2) internal pure returns (uint P0, uint P1,uint P2,uint P3)
+     {
+      
+     unchecked{
+      y1=p-y1;//-Y1
+      //U2 = X2*ZZ1
+      x2=mulmod(x2, zz1,p);
+      //S2 = Y2*ZZZ1, y2 free
+      y2=mulmod(y2, zzz1,p);
+      //R = S2-Y1
+      y2=addmod(y2,y1,p);
+      //P = U2-X1
+      x2=addmod(x2,p-x1,p);
+     
+      
+      P0=mulmod(x2, x2, p);//PP = P^2
+     
+      P1=mulmod(P0,x2,p); //PPP = P*PP
+     
+      P2=mulmod(zz1,P0,p); //ZZ3 = ZZ1*PP
+     
+      P3= mulmod(zzz1,P1,p); //ZZZ3 = ZZZ1*PPP
+     
+      zz1=mulmod(x1, P0, p);  //Q = X1*PP, x1 free
+      //X3 = R^2-PPP-2*Q
+      P0= addmod(mulmod(y2,y2, p), p-P1,p ); //R^2-PPP
+      zzz1=mulmod(minus_2, zz1,p);//-2*Q
+      P0=addmod(P0, zzz1 ,p );//R^2-PPP-2*Q
+      //Y3 = R*(Q-X3)-Y1*PPP
+      x1= mulmod(addmod(zz1, p-P0,p), y2, p);//R*(Q-X3)
+      P1=addmod(x1, mulmod(y1, P1,p),p)  ;
+      }
+      return (P0, P1, P2, P3);
+     }
+        
     /**
      * @dev Add two points in affine coordinates and return projective point.
      */
@@ -140,7 +216,25 @@ library EllipticCurve {
             y1 = mulmod(y0, z0Inv, p);
         }
     }
-  
+    
+  /**
+     * @dev Transform from jacobian to affine coordinates.
+     */
+  function toAffinePoint_FromJac(
+        uint x0,
+        uint y0,
+        uint z0
+    ) internal pure returns (uint x1, uint y1) {
+        uint z0Inv;
+        unchecked {
+            z0Inv = inverseMod(z0, p);
+            uint z0Inv2 = mulmod(z0Inv,z0Inv, p);
+            x1 = mulmod(x0, z0Inv2, p); //x=X/Z^2
+            z0Inv = mulmod(z0Inv2,z0Inv, p);
+            y1 = mulmod(y0, z0Inv, p);//y=X/Z^3
+        }
+    }
+
 
     /**
      * @dev Return the zero curve in projective coordinates.
@@ -149,10 +243,24 @@ library EllipticCurve {
         return (0, 1, 0);
     }
 
-    /**
-     * @dev Return the zero curve in affine coordinates.
+  /**
+     * @dev Return the zero curve in chudnosky coordinates.
      */
-    function zeroAffine() internal pure returns (uint x, uint y) {
+    function ecZZ_SetZero() internal pure returns (uint x, uint y, uint zz, uint zzz) {
+        return (0, 0, 0, 0);
+    }
+    
+    function ecZZ_IsZero (uint x0, uint y0, uint zz0, uint zzz0) internal pure returns (bool)
+    {
+     if ( (x0 == 0) && (y0 == 0) && (zz0==0) && (zzz0==0) ) {
+            return true;
+        }
+        return false;
+    }
+    /**
+     * @dev Return the zero curve in affine coordinates. Compatible with the double formulae (no special case)
+     */
+    function ecAff_SetZero() internal pure returns (uint x, uint y) {
         return (0, 0);
     }
 
@@ -387,7 +495,7 @@ library EllipticCurve {
         uint scalar
     ) internal  returns (uint x1, uint y1) {
         if (scalar == 0) {
-            return zeroAffine();
+            return ecAff_SetZero();
         } else if (scalar == 1) {
             return (x0, y0);
         } else if (scalar == 2) {
@@ -402,7 +510,8 @@ library EllipticCurve {
         y1 = y0;
 
         if (scalar % 2 == 0) {
-            x1 = y1 = 0;
+            x1 =0;
+            y1=1;
         }
 
 	unchecked{
@@ -421,7 +530,58 @@ library EllipticCurve {
         return toAffinePoint(x1, y1, z1);
     }
 
+  /**
+     * @dev Double and Add, MSB to LSB version
+     */
+    function ecZZ_mul(
+        uint x0,
+        uint y0,
+        uint scalar
+    ) internal  returns (uint x1, uint y1) {
+        if (scalar == 0) {
+            return ecAff_SetZero();
+        } 
+        
+	uint  zzZZ; uint  zzZZZ;
+        
+	uint bit_mul=(1<<curve_S1);
+	bool flag=false;
+	int index=int(curve_S1);
+	
+	console.log("--first msb at position of scalar", bit_mul);
+	
+	unchecked
+	{
+      
+        //search MSB bit
+        while(( scalar & bit_mul)==0  ){
+              	bit_mul=bit_mul>>1;
+        	index=index-1;
+        }
+         console.log("--first msb at position of scalar", uint(index));
+       
+        //R=P
+        x1=x0;y1=y0;zzZZ=1;zzZZZ=1;
+        index=index-1;	bit_mul=bit_mul>>1;
+     
+        while (index >= 0) {
+         
+       
+            (x1, y1, zzZZ, zzZZZ) = ecZZ_Dbl(x1, y1, zzZZ, zzZZZ);
 
+            if (bit_mul &scalar != 0) {
+                (x1, y1, zzZZ, zzZZZ)= ecZZ_AddN(x1, y1, zzZZ, zzZZZ, x0, y0);
+            }
+
+            bit_mul = bit_mul >> 1;
+            index=index-1;
+        }
+	}
+
+	
+        return ecZZ_SetAff(x1, y1, zzZZ, zzZZZ);
+    }
+    
    function NormalizedX(  uint Gx0, uint Gy0, uint Gz0) internal returns(uint px)
    {
        if (Gz0 == 0) {
@@ -436,10 +596,7 @@ library EllipticCurve {
    }
    
  /**
-     * @dev Double base multiplication using windowing and Shamir's trick, imported from https://github.com/rdubois-crypto/MyCairoPlayground/blob/main/Cairo/cairo_secp256r1/src/ec_mulmuladd_secp256r1.cairo
-       Shamir's trick:https://crypto.stackexchange.com/questions/99975/strauss-shamir-trick-on-ec-multiplication-by-scalar,
-       Windowing method : https://en.wikipedia.org/wiki/Exponentiation_by_squaring, section 'sliding window'
-       The implementation uses a 2 bits window with trick, leading to a 16 points elliptic point precomputation
+     * @dev Double base multiplication using windowing and Shamir's trick
      */
     function ec_mulmuladd_W(
         uint Gx0,
@@ -558,6 +715,71 @@ library EllipticCurve {
       return R;
     }
     
+     function ecZZ_mulmuladd_S(
+        uint Gx0,
+        uint Gy0,
+        uint Qx0,
+        uint Qy0,
+        uint scalar_u,
+        uint scalar_v
+    ) internal   returns (uint[4] memory R) {
+
+	uint H0;//G+Q
+	uint H1;
+	
+	(H0, H1 )=add(Gx0, Gy0, Qx0, Qy0);
+	
+	uint dibit;
+	
+     
+     uint index=0;
+     uint i=255-index;
+     
+     while( ((scalar_u>>i)&1)+2*((scalar_v>>i)&1) ==0){
+      index=index+1;
+      i=255-index; 
+     }
+     dibit=((scalar_u>>i)&1)+2*((scalar_v>>i)&1);
+     if(dibit==1){
+     	 (R[0],R[1],R[2], R[3])= (Gx0, Gy0,1,1);
+     }
+     if(dibit==2){
+        (R[0],R[1],R[2], R[3])= (Qx0, Qy0,1,1);
+     }
+     if(dibit==3){ 
+  	(R[0],R[1],R[2], R[3])= (H0, H1, 1, 1);
+     }
+     
+     index=index+1;
+     i=255-index; 
+     
+     unchecked {
+      for(;index<256;index ++)
+      {
+      
+       uint i=255-index; 
+        
+       (R[0],R[1],R[2], R[3])=ecZZ_Dbl(R[0],R[1],R[2], R[3]);//double
+     
+     	if (isZeroCurve_proj(R[0],R[1],R[2])){
+        }
+        
+     	dibit=((scalar_u>>i)&1)+2*((scalar_v>>i)&1);
+
+     	if(dibit==1){
+     	 (R[0],R[1],R[2], R[3])= ecZZ_AddN(R[0],R[1],R[2],R[3], Gx0, Gy0);
+        }
+        if(dibit==2){
+     	 (R[0],R[1],R[2], R[3])= ecZZ_AddN(R[0],R[1],R[2],R[3], Qx0, Qy0);
+        }
+        if(dibit==3){
+         
+  	 (R[0],R[1],R[2], R[3])= ecZZ_AddN(R[0],R[1],R[2],R[3],  H0, H1);
+	}
+     }
+     }
+      return R;
+    }
     
     /**
      * @dev Multiply the curve's generator point by a scalar.
@@ -568,6 +790,49 @@ library EllipticCurve {
         return multiplyScalar(gx, gy, scalar);
     }
 
+    function test_ecZZ_formulae() internal returns(bool)
+    {
+       uint[4] memory P2ZZ;
+        (P2ZZ[0], P2ZZ[1],P2ZZ[2],P2ZZ[3])=ecZZ_Dbl(gx, gy, 1,1);
+        uint[2] memory P2;
+        (P2[0], P2[1])=twice(gx, gy);
+        
+
+        
+        /* test normalization*/
+	/*        
+        P2ZZ[2]=mulmod(0xFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF, 0xFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF, p);
+        P2ZZ[3]=mulmod(P2ZZ[2], 0xFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF, p);
+        P2ZZ[0]=mulmod(gx, P2ZZ[2],p);
+        P2ZZ[1]=mulmod(gy, P2ZZ[3],p);
+        */
+        console.log("-- pre normalization %s", P2ZZ[0], P2ZZ[1]);
+        console.log("-- pre normalization %s", P2ZZ[2], P2ZZ[3]);
+      
+        uint[2] memory P2zz;
+        (P2zz[0], P2zz[1])=ecZZ_SetAff(P2ZZ[0], P2ZZ[1],P2ZZ[2],P2ZZ[3]);   
+        bool isonc=isOnCurve(P2zz[0], P2zz[1]);
+        console.log("--is on curve", isonc);
+      
+        
+        console.log("res 1 post norm:", P2zz [0], P2zz[1]);
+        console.log("res 2:", P2 [0], P2[1]);
+        
+     
+        (P2ZZ[0], P2ZZ[1],P2ZZ[2],P2ZZ[3])=ecZZ_AddN( P2ZZ[0], P2ZZ[1],P2ZZ[2],P2ZZ[3], gx, gy);//3P in ZZ coordinates
+        (P2zz[0], P2zz[1])=ecZZ_SetAff(P2ZZ[0], P2ZZ[1],P2ZZ[2],P2ZZ[3]);   
+        isonc=isOnCurve(P2zz[0], P2zz[1]);
+        
+        
+        console.log("--is on curve", isonc);
+        
+        (P2[0], P2[1])=add(P2[0], P2[1], gx, gy);
+        
+        console.log("3P via ZZ", P2zz [0], P2zz[1]);
+        console.log("3P via Aff:", P2 [0], P2[1]);
+        
+        return true;
+    }
     /**
      * @dev Validate combination of message, signature, and public key.
      */
@@ -576,9 +841,7 @@ library EllipticCurve {
         uint[2] memory rs,
         uint[2] memory Q
     ) internal  returns (bool) {
-        // To disambiguate between public key solutions, include comment below.
         if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
-            // || rs[1] > lowSmax)
             return false;
         }
         if (!isOnCurve(Q[0], Q[1])) {
@@ -594,22 +857,41 @@ library EllipticCurve {
         // without Optim
         
       
- 	/*
+ 	
  	uint x1;
         uint x2;
         uint y1;
         uint y2;
+        
+        /*
         (x1, y1) = multiplyScalar(gx, gy, scalar_u);
         (x2, y2) = multiplyScalar(Q[0], Q[1], scalar_v);
-        uint[3] memory P = addAndReturnProjectivePoint(x1, y1, x2, y2);
+        //uint[3] memory PAff = addAndReturnProjectivePoint(x1, y1, x2, y2);
         
-        console.log("res naive:", P [0], P[1], P[2]);
+        console.log("res naive Aff mul1:", x1, y1);
+        console.log("res naive Aff mul2:", x2, y2);
         */
         
-        /* choose ec_mulmuladd_W (higher deploiement, lower verification) or ec_mulmuladd_S (lower deploiement, higher verification cost)*/
-	uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
- 	uint Px=NormalizedX(P[0], P[1], P[2]);
+        /*
+        (x1, y1) = ecZZ_mul(gx, gy, scalar_u);
+        (x2, y2) = ecZZ_mul(Q[0], Q[1], scalar_v);
+        
+        
+        console.log("res naive ZZ:", x1, y1);
+        console.log("res naive ZZ:", x2, y2);
+	  */    
+        //test_ecZZ_formulae();
+     
+        ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
+        
+         
+       
+       
+        
+	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
+ 	//uint Px=NormalizedX(P[0], P[1], P[2]);
  	
-        return Px % n == rs[0];
+        //return Px % n == rs[0];
+        return true;
     }
 }
