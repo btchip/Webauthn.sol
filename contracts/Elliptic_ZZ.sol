@@ -38,6 +38,8 @@ library Ec_ZZ {
     /* -2 constant, used to speed up doubling (avoid negation)*/
     uint constant minus_2 = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFD;
     
+    
+    
     /**
      * @dev Inverse of u in the field of modulo m.
      */
@@ -303,7 +305,8 @@ library Ec_ZZ {
             return LHS == RHS;
         }
     }
-
+    
+    
     /**
      * @dev Double an elliptic curve point in projective coordinates. See
      * https://www.nayuki.io/page/elliptic-curve-point-addition-in-projective-coordinates
@@ -715,6 +718,13 @@ library Ec_ZZ {
       return R;
     }
     
+    struct Indexing_t{
+      uint dibit;
+      uint index;
+      uint i;
+      
+    }
+    
      function ecZZ_mulmuladd_S(
         uint Gx0,
         uint Gy0,
@@ -722,63 +732,117 @@ library Ec_ZZ {
         uint Qy0,
         uint scalar_u,
         uint scalar_v
-    ) internal   returns (uint[4] memory R) {
-
-	uint H0;//G+Q
-	uint H1;
-	
-	(H0, H1 )=add(Gx0, Gy0, Qx0, Qy0);
-	
-	uint dibit;
-	
+    ) internal   returns (uint R0, uint R1) {
+     Indexing_t memory Ind;
      
-     uint index=0;
-     uint i=255-index;
+     uint[2] memory R;
+     uint[2] memory H;//G+Q
+     (H[0], H[1] )=add(Gx0, Gy0, Qx0, Qy0);
      
-     while( ((scalar_u>>i)&1)+2*((scalar_v>>i)&1) ==0){
-      index=index+1;
-      i=255-index; 
+	
+     Ind.index=0;
+     {
+     Ind.i=255-Ind.index;
+     
+     while( ((scalar_u>>Ind.i)&1)+2*((scalar_v>>Ind.i)&1) ==0){
+      Ind.index=Ind.index+1;
+      Ind.i=255-Ind.index; 
      }
-     dibit=((scalar_u>>i)&1)+2*((scalar_v>>i)&1);
-     if(dibit==1){
-     	 (R[0],R[1],R[2], R[3])= (Gx0, Gy0,1,1);
+     Ind.dibit=((scalar_u>>Ind.i)&1)+2*((scalar_v>>Ind.i)&1);
+     if(Ind.dibit==1){
+     	 (R0 ,R1 ,R[0], R[1])= (Gx0, Gy0,1,1);
      }
-     if(dibit==2){
-        (R[0],R[1],R[2], R[3])= (Qx0, Qy0,1,1);
+     if(Ind.dibit==2){
+        (R0 ,R1,R[0], R[1])= (Qx0, Qy0,1,1);
      }
-     if(dibit==3){ 
-  	(R[0],R[1],R[2], R[3])= (H0, H1, 1, 1);
+     if(Ind.dibit==3){ 
+  	(R0 ,R1,R[0], R[1])= (H[0], H[1], 1, 1);
      }
      
-     index=index+1;
-     i=255-index; 
+     Ind.index=Ind.index+1;
+     Ind.i=255-Ind.index; 
+     }
      
      unchecked {
-      for(;index<256;index ++)
+      for(;Ind.index<256;Ind.index ++)
       {
       
-       uint i=255-index; 
+       Ind.i=255-Ind.index; 
         
-       (R[0],R[1],R[2], R[3])=ecZZ_Dbl(R[0],R[1],R[2], R[3]);//double
+       (R0 ,R1,R[0], R[1])=ecZZ_Dbl(R0 ,R1,R[0], R[1]);//double
      
-     	if (isZeroCurve_proj(R[0],R[1],R[2])){
-        }
+     	
         
-     	dibit=((scalar_u>>i)&1)+2*((scalar_v>>i)&1);
+     	Ind.dibit=((scalar_u>>Ind.i)&1)+2*((scalar_v>>Ind.i)&1);
 
-     	if(dibit==1){
-     	 (R[0],R[1],R[2], R[3])= ecZZ_AddN(R[0],R[1],R[2],R[3], Gx0, Gy0);
+     	if(Ind.dibit==1){
+     	 (R0 ,R1,R[0], R[1])= ecZZ_AddN(R0 ,R1,R[0],R[1], Gx0, Gy0);
         }
-        if(dibit==2){
-     	 (R[0],R[1],R[2], R[3])= ecZZ_AddN(R[0],R[1],R[2],R[3], Qx0, Qy0);
+        if(Ind.dibit==2){
+     	 (R0 ,R1,R[0], R[1])= ecZZ_AddN(R0 ,R1,R[0],R[1], Qx0, Qy0);
         }
-        if(dibit==3){
+        if(Ind.dibit==3){
          
-  	 (R[0],R[1],R[2], R[3])= ecZZ_AddN(R[0],R[1],R[2],R[3],  H0, H1);
+  	 (R0 ,R1,R[0], R[1])= ecZZ_AddN(R0 ,R1,R[0],R[1],  H[0], H[1]);
 	}
      }
      }
-      return R;
+      return (R0 ,R1);
+    }
+    
+    /**
+     * @dev 8 dimensional Shamir/Pippinger, will be done externally, validation purpose only
+     */
+    function Precalc_Shamir8( uint[2] memory Q) internal pure returns( uint[2][256] memory Prec)
+    {
+     uint index;
+     uint[2][8] memory PowerPQ;
+     
+     PowerPQ[0][0]=gx;
+     PowerPQ[0][1]=gy;
+     PowerPQ[4][0]=Q[0];
+     PowerPQ[4][1]=Q[1];
+     
+     for(uint i=1;i<4;i++){
+       (PowerPQ[i][0],   PowerPQ[i][1])=twice(PowerPQ[i-1][0],   PowerPQ[i-1][1]);
+       (PowerPQ[i+4][0],   PowerPQ[i+4][1])=twice(PowerPQ[i+3][0],   PowerPQ[i+3][1]);
+     
+     }
+     	
+     for(uint i=1;i<256;i++)
+     {       
+        Prec[i][0]=0;
+        Prec[i][1]=0;
+        
+        for(uint j=0;j<8;j++)
+        {
+        	if(i&(1<<j)!=0){
+        		add(PowerPQ[j][0], PowerPQ[j][1], Prec[i][0], Prec[i][1]);
+        	}
+        }
+     }
+     return Prec;
+    }
+    
+    function ecZZ_mulmuladd_S8(uint scalar_u, uint scalar_v, uint[2][256] memory Shamir8) internal pure returns(uint x,uint y)
+    {
+      uint octobit;uint index;
+      index=255;
+      uint[2] memory R;
+       
+      octobit=128*(scalar_v>>index)+64*(scalar_v>>(index-64))+32*(scalar_v>>(index-128))+16*(scalar_v>>(index-192))+
+               8*(scalar_u>>index)+4*(scalar_u>>(index-64))+2*(scalar_u>>(index-128))+(scalar_u>>(index-192));
+               
+      (x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
+      //loop over 1/4 of scalars
+      for(index=254; index>=192; index--)
+      {
+       octobit=128*(scalar_v>>index)+64*(scalar_v>>(index-64))+32*(scalar_v>>(index-128))+16*(scalar_v>>(index-192))+
+        8*(scalar_u>>index)+4*(scalar_u>>(index-64))+2*(scalar_u>>(index-128))+(scalar_u>>(index-192));
+       
+        (x,y,R[0], R[1])=ecZZ_AddN(   x,y,R[0], R[1], Shamir8[octobit][0],     Shamir8[octobit][1]); 
+      }
+      (x,y)=ecZZ_SetAff(x,y,R[0], R[1]);
     }
     
     /**
@@ -872,19 +936,18 @@ library Ec_ZZ {
         console.log("res naive Aff mul2:", x2, y2);
         */
         
-        /*
-        (x1, y1) = ecZZ_mul(gx, gy, scalar_u);
-        (x2, y2) = ecZZ_mul(Q[0], Q[1], scalar_v);
+        
+       // (x1, y1) = ecZZ_mul(gx, gy, scalar_u);
+       // (x2, y2) = ecZZ_mul(Q[0], Q[1], scalar_v);
         
         
-        console.log("res naive ZZ:", x1, y1);
-        console.log("res naive ZZ:", x2, y2);
-	  */    
+       // console.log("res naive ZZ:", x1, y1);
+       // console.log("res naive ZZ:", x2, y2);
+	      
         //test_ecZZ_formulae();
      
-        ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
-        
-         
+        //Shamir 2 dimensions 
+        (x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
        
        
         
@@ -894,4 +957,64 @@ library Ec_ZZ {
         //return Px % n == rs[0];
         return true;
     }
+    
+     function validateSignature_Precomputed(
+        bytes32 message,
+        uint[2] memory rs,
+        uint[2][256] memory Shamir8
+    ) internal  returns (bool) {
+     uint[2] memory Q;//extract Q from Shamir8
+     
+     if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
+            return false;
+        }
+        if (!isOnCurve(Q[0], Q[1])) {
+            return false;
+        }
+  	
+      
+
+        uint sInv = inverseMod(rs[1], n);
+        uint scalar_u=mulmod(uint(message), sInv, n);
+        uint scalar_v= mulmod(rs[0], sInv, n);
+ 		
+        // without Optim
+        
+      
+ 	
+ 	uint x1;
+        uint x2;
+        uint y1;
+        uint y2;
+        
+        /*
+        (x1, y1) = multiplyScalar(gx, gy, scalar_u);
+        (x2, y2) = multiplyScalar(Q[0], Q[1], scalar_v);
+        //uint[3] memory PAff = addAndReturnProjectivePoint(x1, y1, x2, y2);
+        
+        console.log("res naive Aff mul1:", x1, y1);
+        console.log("res naive Aff mul2:", x2, y2);
+        */
+        
+        
+       // (x1, y1) = ecZZ_mul(gx, gy, scalar_u);
+       // (x2, y2) = ecZZ_mul(Q[0], Q[1], scalar_v);
+        
+        
+       // console.log("res naive ZZ:", x1, y1);
+       // console.log("res naive ZZ:", x2, y2);
+	      
+        //test_ecZZ_formulae();
+     
+        //Shamir 2 dimensions 
+        //(x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
+        //Shamir 8 dimensions
+         (x1, y1)=ecZZ_mulmuladd_S8(scalar_u, scalar_v, Shamir8);
+       
+	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
+ 	//uint Px=NormalizedX(P[0], P[1], P[2]);
+ 	
+        //return Px % n == rs[0];
+        return true;
+        } 
 }
