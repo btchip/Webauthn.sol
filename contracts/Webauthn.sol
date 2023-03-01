@@ -12,14 +12,6 @@ error InvalidSignature();
 contract Webauthn {
     uint256 public counter;
 
-    //precomputations
-    uint[2][256]  Shamir8;
-    
-    constructor(uint[2] memory Q){
-    	Shamir8=Ec_ZZ.Precalc_Shamir8(Q);
-    
-    }
-    
     
     function checkSignature(
         bytes memory authenticatorData,
@@ -80,6 +72,8 @@ contract Webauthn {
         return result;
     }
 
+
+
     function validate(
         bytes memory authenticatorData,
         bytes1 authenticatorDataFlagMask,
@@ -104,94 +98,7 @@ contract Webauthn {
         }
         counter++;
     }
-/*
-    function checkSignature_prec(
-        bytes memory authenticatorData,
-        bytes1 authenticatorDataFlagMask,
-        bytes memory clientData,
-        bytes32 clientChallenge,
-        uint clientChallengeDataOffset,
-        uint[2] memory rs,
-         uint[2][256] memory Shamir8
-    ) public  returns (bool) {
-        // Let the caller check if User Presence (0x01) or User Verification (0x04) are set
-        if (
-            (authenticatorData[32] & authenticatorDataFlagMask) !=
-            authenticatorDataFlagMask
-        ) {
-            revert InvalidAuthenticatorData();
-        }
-        // Verify that clientData commits to the expected client challenge
-        string memory challengeEncoded = Base64URL.encode32(
-            abi.encodePacked(clientChallenge)
-        );
-        bytes memory challengeExtracted = new bytes(
-            bytes(challengeEncoded).length
-        );
-        copyBytes(
-            clientData,
-            clientChallengeDataOffset,
-            challengeExtracted.length,
-            challengeExtracted,
-            0
-        );
-        if (
-            keccak256(abi.encodePacked(bytes(challengeEncoded))) !=
-            keccak256(abi.encodePacked(challengeExtracted))
-        ) {
-            revert InvalidClientData();
-        }      
-        // Verify the signature over sha256(authenticatorData || sha256(clientData))
-        bytes memory verifyData = new bytes(authenticatorData.length + 32);
-        copyBytes(
-            authenticatorData,
-            0,
-            authenticatorData.length,
-            verifyData,
-            0
-        );
-        copyBytes(
-            abi.encodePacked(sha256(clientData)),
-            0,
-            32,
-            verifyData,
-            authenticatorData.length
-        );
-        bytes32 message = sha256(verifyData);
-	bool result=Ec_ZZ.validateSignature_Precomputed(message, rs,  Shamir8);
-	console.log("result= %s", result);
 
-        return result;
-    }
-    
- function validate_prec(
-        bytes memory authenticatorData,
-        bytes1 authenticatorDataFlagMask,
-        bytes memory clientData,
-        bytes32 clientChallenge,
-        uint clientChallengeDataOffset,
-        uint[2] memory rs,
-        uint[2] memory Q
-    ) public {
-        if (
-            !checkSignature_prec(
-                authenticatorData,
-                authenticatorDataFlagMask,
-                clientData,
-                clientChallenge,
-                clientChallengeDataOffset,
-                rs,
-                Q
-            )
-        ) {
-            revert InvalidSignature();
-        }
-        counter++;
-    }
-    
-    
-    The following function has been written by Alex Beregszaszi (@axic), use it under the terms of the MIT license
-  */
     function copyBytes(
         bytes memory _from,
         uint _fromOffset,

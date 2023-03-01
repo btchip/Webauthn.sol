@@ -24,6 +24,12 @@ function derToRS(der) {
 }
 
 describe("Webauthn", function() {
+
+  const ECDSA = require('ecdsa-secp256r1');
+  const privateKey = ECDSA.generateKey()
+
+ // window.print(privateKey);
+
   it("Check message", async function() {
     const Webauthn = await ethers.getContractFactory("Webauthn");
    
@@ -44,7 +50,11 @@ describe("Webauthn", function() {
     );
     expect(result);
 */
-    const webauthn = await Webauthn.deploy([ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]);
+
+//uncomment for no precomputation validation
+
+/*
+    const webauthn = await Webauthn.deploy();
     await webauthn.deployed();
 
     const result = await webauthn.validate(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
@@ -52,7 +62,25 @@ describe("Webauthn", function() {
         [ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]
     );
     await result.wait();
-    
+  */  
 
+//uncomment for with precomputation validation
+    
+      const Webauthn_prec = await ethers.getContractFactory("Webauthn_prec");
+   
+    const webauthn_prec = await Webauthn_prec.deploy([ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]);
+    
+    
+      const webauthn_prec2 = await webauthn_prec.deploy_part2([ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]);
+      
+      
+ 
+      const result2 = await webauthn_prec2.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
+        [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))]
+        
+    );
+    
+ await result2.wait();
+    
   })
 });
