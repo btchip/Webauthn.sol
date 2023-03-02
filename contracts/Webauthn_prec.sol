@@ -23,9 +23,9 @@ contract Webauthn_prec {
     
     function deploy_part2(uint[2] memory Q) public  returns (bool) 
     {
-    
-     uint[2][128] memory Prec2;//=Ec_ZZ.Precalc_Shamir8_part2(Q);
+     unchecked{  
      
+     uint[2][128] memory Prec2=Ec_ZZ.Precalc_Shamir8_part2(Q);
      
        for(uint i=128;i<256;i++)
      {       
@@ -33,8 +33,10 @@ contract Webauthn_prec {
         Shamir8[i][1]=Prec2[i-128][1];
      }
      
-     console.log("Precompute part 2 done");
-
+        console.log("Precompute part 1 done");
+  
+    }
+  
      return true;
     }
 

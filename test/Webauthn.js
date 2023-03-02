@@ -53,7 +53,7 @@ describe("Webauthn", function() {
 
 //uncomment for no precomputation validation
 
-/*
+
     const webauthn = await Webauthn.deploy();
     await webauthn.deployed();
 
@@ -62,9 +62,11 @@ describe("Webauthn", function() {
         [ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]
     );
     await result.wait();
-  */  
+   
 
 //uncomment for with precomputation validation
+    
+    
     
       const Webauthn_prec = await ethers.getContractFactory("Webauthn_prec");
    
@@ -75,7 +77,7 @@ describe("Webauthn", function() {
       
       
  
-      const result2 = await webauthn_prec2.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
+      const result2 = await webauthn_prec.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
         [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))]
         
     );

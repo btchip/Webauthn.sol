@@ -224,7 +224,7 @@ library Ec_ZZ {
   /**
      * @dev Transform from jacobian to affine coordinates.
      */
-  function toAffinePoint_FromJac(
+  function ecJAc_SetAff(
         uint x0,
         uint y0,
         uint z0
@@ -256,7 +256,7 @@ library Ec_ZZ {
     
     function ecZZ_IsZero (uint x0, uint y0, uint zz0, uint zzz0) internal pure returns (bool)
     {
-     if ( (x0 == 0) && (y0 == 0) && (zz0==0) && (zzz0==0) ) {
+     if ( (y0 == 0)  ) {
             return true;
         }
         return false;
@@ -272,14 +272,14 @@ library Ec_ZZ {
      * @dev Check if the curve is the zero curve in affine rep.
      */
     function isZeroCurve_affine(uint x0, uint y0) internal pure returns (bool isZero) {
-        if (x0 == 0 && y0 == 0) {
+        if (y0 == 0 ) {
             return true;
         }
         return false;
     }
     
      function isZeroCurve_proj(uint x0, uint y0, uint z0) internal pure returns (bool isZero) {
-        if ( (x0 == 0) && (y0 == 0) && (z0==0) ) {
+        if ( (y0 == 0)  ) {
             return true;
         }
         return false;
@@ -797,19 +797,22 @@ library Ec_ZZ {
      
      Pow64_PQ[0][0]=gx;
      Pow64_PQ[0][1]=gy;
+    
      Pow64_PQ[4][0]=Q[0];
      Pow64_PQ[4][1]=Q[1];
-     
      
      /* raise to multiplication by 64 by 6 consecutive doubling*/
      for(uint j=1;j<4;j++){
       	(Pow64_PQ[j][0],   Pow64_PQ[j][1])=twice(Pow64_PQ[j-1][0],   Pow64_PQ[j-1][1]);
+      	 
      	(Pow64_PQ[j+4][0],   Pow64_PQ[j+4][1])=twice(Pow64_PQ[j+3][0],   Pow64_PQ[j+3][1]);
 
-     	for(uint i=0;i<6;i++){
+     	for(uint i=0;i<63;i++){
      	(Pow64_PQ[j][0],   Pow64_PQ[j][1])=twice(Pow64_PQ[j][0],   Pow64_PQ[j][1]);
      	(Pow64_PQ[j+4][0],   Pow64_PQ[j+4][1])=twice(Pow64_PQ[j+4][0],   Pow64_PQ[j+4][1]);
      	}
+     	
+     	
      }
      
      /* neutral point */
@@ -827,7 +830,9 @@ library Ec_ZZ {
         	if( (i&(1<<j))!=0){
         		(Prec[i][0], Prec[i][1])=add(Pow64_PQ[j][0], Pow64_PQ[j][1], Prec[i][0], Prec[i][1]);
         	}
+        	
         }
+         
      }
      return Prec;
     }
@@ -837,22 +842,24 @@ library Ec_ZZ {
      uint index;
      uint[2][8] memory Pow64_PQ; //store P, 64P, 128P, 192P, Q, 64Q, 128Q, 192Q
      
+     
      Pow64_PQ[0][0]=gx;
      Pow64_PQ[0][1]=gy;
      Pow64_PQ[4][0]=Q[0];
      Pow64_PQ[4][1]=Q[1];
      
      
-     /* raise to multiplication by 64 by 6 consecutive doubling*/
+     /* raise to multiplication by 2^64 by 64 consecutive doubling*/
      for(uint j=1;j<4;j++){
       	(Pow64_PQ[j][0],   Pow64_PQ[j][1])=twice(Pow64_PQ[j-1][0],   Pow64_PQ[j-1][1]);
      	(Pow64_PQ[j+4][0],   Pow64_PQ[j+4][1])=twice(Pow64_PQ[j+3][0],   Pow64_PQ[j+3][1]);
 
-     	for(uint i=0;i<6;i++){
+     	for(uint i=0;i<63;i++){
      	(Pow64_PQ[j][0],   Pow64_PQ[j][1])=twice(Pow64_PQ[j][0],   Pow64_PQ[j][1]);
      	(Pow64_PQ[j+4][0],   Pow64_PQ[j+4][1])=twice(Pow64_PQ[j+4][0],   Pow64_PQ[j+4][1]);
      	}
-     }
+       
+      }
      
      /* neutral point */
      Prec[0][0]=0;
@@ -861,8 +868,8 @@ library Ec_ZZ {
      	
      for(uint i=128;i<256;i++)
      {       
-        Prec[i][0]=0;
-        Prec[i][1]=0;
+        Prec[i-128][0]=0;
+        Prec[i-128][1]=0;
         
         for(uint j=0;j<8;j++)
         {
@@ -870,33 +877,44 @@ library Ec_ZZ {
         		(Prec[i-128][0], Prec[i-128][1])=add(Pow64_PQ[j][0], Pow64_PQ[j][1], Prec[i-128][0], Prec[i-128][1]);
         	}
         }
-     }
+        }
      return Prec;
     }
 
     //8 dimensions Shamir's trick, using precomputations stored in Shamir8
-    function ecZZ_mulmuladd_S8(uint scalar_u, uint scalar_v, uint[2][256] memory Shamir8) internal pure returns(uint x,uint y)
+    function ecZZ_mulmuladd_S8(uint scalar_u, uint scalar_v, uint[2][256] memory Shamir8) internal  returns(uint x,uint y)
     {
       uint octobit;uint index;
       index=255;
       uint[2] memory R;
       unchecked{ 
       
+      //tbd case of msb octobit is null
+      /*
       octobit=16*((scalar_v>>index)&1)+32*((scalar_v>>(index-64))&1)+64*((scalar_v>>(index-128))&1)+128*((scalar_v>>(index-192))&1)+
                ((scalar_u>>index)&1)+2*((scalar_u>>(index-64))&1)+4*((scalar_u>>(index-128))&1)+8*((scalar_u>>(index-192))&1);
+      */
+      octobit=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
+      
         
-               
+                
       (x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
       //loop over 1/4 of scalars
       for(index=254; index>=192; index--)
       {
-       octobit=16*((scalar_v>>index)&1)+32*((scalar_v>>(index-64))&1)+64*((scalar_v>>(index-128))&1)+128*((scalar_v>>(index-192))&1)+
-               ((scalar_u>>index)&1)+2*((scalar_u>>(index-64))&1)+4*((scalar_u>>(index-128))&1)+8*((scalar_u>>(index-192))&1);
-        
+       (x,y,R[0], R[1])=ecZZ_Dbl(   x,y,R[0], R[1]); 
+       
+       octobit=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
+      
         (x,y,R[0], R[1])=ecZZ_AddN(   x,y,R[0], R[1], Shamir8[octobit][0],     Shamir8[octobit][1]); 
       }
       (x,y)=ecZZ_SetAff(x,y,R[0], R[1]);
+    
       }
+      
+    
     }
     
     /**
@@ -991,7 +1009,11 @@ library Ec_ZZ {
     	
      }   
         
-        
+     function test_Aff_formulae(uint[2] memory Q) internal  returns (bool) 
+     {
+       
+      return true;
+     }   
         
     /**
      * @dev Validate combination of message, signature, and public key.
@@ -1035,6 +1057,9 @@ library Ec_ZZ {
        //(x1, y1,scalar_u)=ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
        
        (x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
+       
+       console.log("res Shamir monobit XYZZ  mulmuladd:",x1);
+	
         return x1 % n == rs[0];
         
         
@@ -1064,11 +1089,6 @@ library Ec_ZZ {
         uint sInv = inverseMod(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
- 		
-        // without Optim
-        
-      
- 	
  	uint x1;
         uint x2;
         uint y1;
@@ -1080,12 +1100,11 @@ library Ec_ZZ {
         //Shamir 2 dimensions 
         //(x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
         //Shamir 8 dimensions
-         (x1, y1)=ecZZ_mulmuladd_S8(scalar_u, scalar_v, Shamir8);
+        (x1, y1)=ecZZ_mulmuladd_S8(scalar_u, scalar_v, Shamir8);
        	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",x1);
 	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
  	//uint Px=NormalizedX(P[0], P[1], P[2]);
  	
-        //return Px % n == rs[0];
-        return true;
+        return x1 % n == rs[0];
         } 
 }
