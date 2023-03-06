@@ -1,8 +1,13 @@
-//*************************************************************************************/
-///* Copyright (C) 2022 - Renaud Dubois - This file is part of Cairo_musig2 project	 */
+//********************************************************************************************/
+//  ___           _       ___               _         _    _ _    
+// | __| _ ___ __| |_    / __|_ _ _  _ _ __| |_ ___  | |  (_) |__ 
+// | _| '_/ -_|_-< ' \  | (__| '_| || | '_ \  _/ _ \ | |__| | '_ \
+// |_||_| \___/__/_||_|  \___|_|  \_, | .__/\__\___/ |____|_|_.__/
+//                                |__/|_|                        
+///* Copyright (C) 2022 - Renaud Dubois - This file is part of FCL (Fresh CryptoLib) project */
 ///* License: This software is licensed under MIT License 	 */
 ///* See LICENSE file at the root folder of the project.				 */
-///* FILE: ecZZ.sol						         */
+///* FILE: Elliptic_ZZ.sol						         */
 ///* 											 */
 ///* 											 */
 ///* DESCRIPTION: modified XYZZ system coordinates for EVM elliptic point multiplication
@@ -830,7 +835,6 @@ library Ec_ZZ {
         	if( (i&(1<<j))!=0){
         		(Prec[i][0], Prec[i][1])=add(Pow64_PQ[j][0], Pow64_PQ[j][1], Prec[i][0], Prec[i][1]);
         	}
-        	
         }
          
      }
@@ -1061,7 +1065,6 @@ library Ec_ZZ {
        console.log("res Shamir monobit XYZZ  mulmuladd:",x1);
 	
         return x1 % n == rs[0];
-        
         
     }
     

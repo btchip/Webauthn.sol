@@ -23,18 +23,79 @@ function derToRS(der) {
   return [ r, s ]
 }
 
+
 describe("Webauthn", function() {
 
-  const ECDSA = require('ecdsa-secp256r1');
-  const privateKey = ECDSA.generateKey()
-
- // window.print(privateKey);
-
   it("Check message", async function() {
+  
+  
+  
+console.log("\n***************************************** \n Validating ECDSA Core verification \n*****************************************" );
+  /* I Validation of Core ecdsa verification (no webauthn encoding) without precomputations */
+  
+const Ecdsa_core = await ethers.getContractFactory("Webauthn");
+
+  let elliptic = require('elliptic');
+  let sha3 = require('js-sha3');
+ // let ec = new elliptic.ec('p256');
+  let ec = new elliptic.ec('p256');
+// let keyPair = ec.genKeyPair(); // Generate random keys
+  let keyPair = ec.keyFromPrivate(
+ "97ddae0f3a25b92268175400149d65d6887b9cefaf28ea2c078e05cdc15a3c01");
+let privKey = keyPair.getPrivate("hex");
+let pubKey = keyPair.getPublic();
+console.log(`Private key: ${privKey}`);
+console.log("Public key :", pubKey.encode("hex").substr(2));
+console.log("Public key (compressed):",
+    pubKey.encodeCompressed("hex"));
+
+ const publicKey_ecdsa =Buffer.from(pubKey.encode("hex").substr(2), "hex");
+ 
+ 
+console.log("publicKey_ecdsa:", publicKey_ecdsa);
+ 
+ let msg = 'Message for signing';
+let msgHash = sha3.keccak256(msg);
+let hash=Buffer.from(msgHash, "hex");
+
+let signature_js =  ec.sign(msgHash, privKey, "hex", {canonical: true});
+
+console.log(`Msg: ${msg}`);
+console.log(`Msg hash: ${msgHash}`);
+
+console.log("hash:" , hash);
+
+
+console.log("Signature:", signature_js.toDER('hex').toString(16));
+
+console.log("Signature:",Buffer.from(signature_js.toDER('hex'), "hex"));
+
+const ecdsaParsed = derToRS(Buffer.from(signature_js.toDER('hex'), "hex"));
+
+console.log("Signature parsed:", ecdsaParsed);
+    
+    
+
+    const ecdsa = await Ecdsa_core.deploy();
+    await ecdsa.deployed();
+    
+    
+    const result_ecdsa = await ecdsa.ecdsa_verif(hash,
+        [ ethers.BigNumber.from("0x" + ecdsaParsed[0].toString('hex')), ethers.BigNumber.from("0x" + ecdsaParsed[1].toString('hex'))],
+        [ ethers.BigNumber.from("0x" + publicKey_ecdsa.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey_ecdsa.slice(32).toString('hex'))]
+    );
+    
+    await result_ecdsa.wait();
+    
+    
+console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates \n*****************************************" );
+  /* II Validation of Webauthn verification without precomputations */
     const Webauthn = await ethers.getContractFactory("Webauthn");
    
     const publicKey = Buffer.from("fdf8bce27f54e06f3aee3b6a542db1ab1f2418d7370a78b150d06965f942b14a470cdee69ab50e610c39b840681bf816b030f4a0a5d5af02ce27dcce6bede89f", "hex");
     const signature = Buffer.from("30440220655c9a457615aac594d92fb6d842f0e910e5ee6677cddbcddaea624f3203f0e702207b71a302b06c91a52b9c4ba5a7fb85226738b02c144e8ee177d034022a79c946", "hex");
+    
+console.log("Signature:", signature);
     const authenticatorData = Buffer.from("f8e4b678e1c62f7355266eaa4dc1148573440937063a46d848da1e25babbd20b010000004d", "hex");
     const clientData = Buffer.from("7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224e546f2d3161424547526e78786a6d6b61544865687972444e5833697a6c7169316f776d4f643955474a30222c226f726967696e223a2268747470733a2f2f66726573682e6c65646765722e636f6d222c2263726f73734f726967696e223a66616c73657d", "hex");
     const clientChallenge = Buffer.from("353a3ed5a0441919f1c639a46931de872ac3357de2ce5aa2d68c2639df54189d", "hex");
@@ -43,6 +104,8 @@ describe("Webauthn", function() {
     const challengeOffset = clientData.indexOf("226368616c6c656e6765223a", 0, "hex") + 12 + 1;    
     const signatureParsed = derToRS(signature);
 
+
+console.log("Signature parsed:", signatureParsed);
 	/*
     const result = await webauthn.checkSignature(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
         [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))],
@@ -52,6 +115,7 @@ describe("Webauthn", function() {
 */
 
 //uncomment for no precomputation validation
+
 
 
     const webauthn = await Webauthn.deploy();
@@ -67,7 +131,9 @@ describe("Webauthn", function() {
 //uncomment for with precomputation validation
     
     
-    
+
+console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations \n*****************************************" );    
+  /* III Validation of Webauthn verification without precomputations */
       const Webauthn_prec = await ethers.getContractFactory("Webauthn_prec");
    
     const webauthn_prec = await Webauthn_prec.deploy([ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]);

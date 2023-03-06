@@ -13,6 +13,18 @@ contract Webauthn {
     uint256 public counter;
 
     
+    function ecdsa_verif( bytes32 hash,  uint[2] memory rs,
+        uint[2] memory Q)  public  returns (bool)
+    {
+    // bytes32 message = sha256(verifyData);
+     console.log("hash=", uint(hash));
+    console.log("rs0=", rs[0]);
+    
+     bool result=Ec_ZZ.validateSignature(bytes32(hash), rs, Q);
+     console.log("result= %s", result);
+
+    }
+    
     function checkSignature(
         bytes memory authenticatorData,
         bytes1 authenticatorDataFlagMask,
@@ -65,6 +77,11 @@ contract Webauthn {
             verifyData,
             authenticatorData.length
         );
+        
+        /*
+        uint8 tmp=verifyData[0];
+        console.log("verifyData:", tmp);
+        */
         bytes32 message = sha256(verifyData);
 	bool result=Ec_ZZ.validateSignature(message, rs, Q);
 	console.log("result= %s", result);
