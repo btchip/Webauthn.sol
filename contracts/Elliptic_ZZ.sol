@@ -1057,9 +1057,12 @@ library Ec_ZZ {
      
         return PAff[0] % n == rs[0];
         */
-        
+        //Shamir 2 dimensions, windowed         
        //(x1, y1,scalar_u)=ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
        
+        //Shamir 2 dimensions 
+        //(x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
+        
        (x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
        
        console.log("res Shamir monobit XYZZ  mulmuladd:",x1);
@@ -1100,9 +1103,7 @@ library Ec_ZZ {
 	      
         //test_ecZZ_formulae();
      
-        //Shamir 2 dimensions 
-        //(x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
-        //Shamir 8 dimensions
+       //Shamir 8 dimensions
         (x1, y1)=ecZZ_mulmuladd_S8(scalar_u, scalar_v, Shamir8);
        	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",x1);
 	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );

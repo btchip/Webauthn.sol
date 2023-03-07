@@ -5,6 +5,8 @@ import {Base64URL} from "./Base64URL.sol";
 import {Ec_ZZ} from "./Elliptic_ZZ.sol";
 import "hardhat/console.sol";
 
+
+
 error InvalidAuthenticatorData();
 error InvalidClientData();
 error InvalidSignature();

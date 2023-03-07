@@ -5,23 +5,76 @@ import {Base64URL} from "./Base64URL.sol";
 import {Ec_ZZ} from "./Elliptic_ZZ.sol";
 import "hardhat/console.sol";
 
+import  "solmate/src/utils/SSTORE2.sol";
+
+
+
 error InvalidAuthenticatorData();
 error InvalidClientData();
 error InvalidSignature();
 
+contract Webauthn_prec2 {
+
+  address   dataPointer;
+    
+  constructor( bytes memory Shamir8_ss2)
+  {
+     uint taille;
+     assembly{
+     	taille:=mload(Shamir8_ss2)
+     	}
+      
+     console.log("Ecriture de la table input  dans le contrat, taille :", taille);
+   
+     dataPointer=SSTORE2.write(Shamir8_ss2);
+     bytes memory ec_point=new bytes(64);
+    
+     uint offset;
+     uint endoffset;
+     uint px;
+     uint py;
+     
+     console.log("Relecture de la table :", taille);
+
+     
+     for(uint i=0;i<256;i++)
+     {
+      offset=64*i;
+      endoffset=offset+64;
+      
+      ec_point=SSTORE2.read(dataPointer, offset, endoffset);
+      assembly{
+        px:=mload(add(ec_point,32))
+        py:=mload(add(ec_point,64))
+        
+      }
+      
+       //console.log("Read :", px,py);
+       //console.log(Ec_ZZ.ecAff_isOnCurve(px, py));
+     } 
+  }
+
+}
+
 contract Webauthn_prec {
     uint256 public counter;
-
+     
+    address   dataPointer;
+    
     //precomputations
-    uint[2][256]  Shamir8;
+    uint[2][256] public Shamir8;
     
     constructor(uint[2] memory Q){
-     	
+    
+    console.log("Precompute for Public key:", Q[0], Q[1]);
+      	
     Shamir8=Ec_ZZ.Precalc_Shamir8_part1(Q);
     console.log("Precompute part 1 done");
     }
     
-    function deploy_part2(uint[2] memory Q) public  returns (bool) 
+    
+    
+    function deploy_part2(uint[2] memory Q) public  returns ( uint[2][256] memory res) 
     {
      unchecked{  
      
@@ -33,11 +86,25 @@ contract Webauthn_prec {
         Shamir8[i][1]=Prec2[i-128][1];
      }
      
-        console.log("Precompute part 1 done");
-  
+        console.log("Precompute part 2 done:");
+  	
     }
-  
-     return true;
+    
+ 
+     /* 256 point, 2 coordinates, 32 bytes each =16384 bytes*/
+     //bytes memory Shamir8_ss2= new bytes(1);
+   
+     for(uint i=0; i<256; i++)
+     {
+         console.log("\"", Shamir8[i][0],"\",");
+         console.log("\"", Shamir8[i][1],"\",");
+	//res[i][0]=Shamir8[i][0];
+	//res[i][1]=Shamir8[i][1];
+     }
+     
+     //cette ligne pète
+     //dataPointer=SSTORE2.write(Shamir8_ss2);
+     return res=Shamir8;
     }
 
     function checkSignature_prec(
