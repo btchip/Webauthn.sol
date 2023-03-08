@@ -50,14 +50,22 @@ console.log("\n***************************************** \n Direct table adressi
 
 const wo_table = await ethers.getContractFactory("BytecodeTable");
 const deployed = await wo_table.deploy();
-await deployed.deployed();
+
+const replaceable = await ethers.getContractFactory("BytecodeTable");
+const deployed_2 = await replaceable.deploy();
+
+await deployed_2.deployed();
 
  console.log(
-    `table contract deployed to  ${deployed.address}`
+    `replaceable contract deployed to  ${deployed_2.address}`
   );
 
 
- const result_show = await deployed.show_myself(deployed.address);
+await network.provider.send("hardhat_setCode", [deployed_2.address, "0x"+precompute]);
+
+const result_show = await deployed.Reader(deployed_2.address);
+
+
 
 console.log("\n***************************************** \n Validating ECDSA Core verification \n*****************************************" );
   /* I Validation of Core ecdsa verification (no webauthn encoding) without precomputations */
@@ -181,7 +189,7 @@ console.log("\n***************************************** \n Validating WebAuthn 
     
 */
 
-console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations in precomputed contract \n*****************************************" );    
+console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations in precomputed contract with sstore2 \n*****************************************" );    
   /* III Validation of Webauthn verification with precomputations */
   
   
@@ -193,19 +201,35 @@ console.log("length:",precomputations_buff.length);
  
 const wo_core2 = await ethers.getContractFactory("Webauthn_prec2");
 
-const wo2 = await wo_core.deploy(precomputations_buff);
+const wo2 = await wo_core2.deploy(precomputations_buff);
 
 
       
       
  
-      const result3 = await wo.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
+      const result3 = await wo2.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
         [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))]
         
     );
     
  await result3.wait();
         
+
+console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations in precomputed contract with extcodecopy \n*****************************************" );    
+  /* IV Validation of Webauthn verification with precomputations */
+  
+  
+const wo_core3 = await ethers.getContractFactory("Webauthn_prec3");
+ 
+ 
+const wo3 = await wo_core3.deploy(deployed_2.address);
+  
+
+      const result4 = await wo3.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
+        [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))]
+        
+    );
     
+ await result4.wait();      
   })
 });

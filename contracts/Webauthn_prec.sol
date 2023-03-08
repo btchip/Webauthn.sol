@@ -13,42 +13,15 @@ error InvalidAuthenticatorData();
 error InvalidClientData();
 error InvalidSignature();
 
-
+contract replaceable{
+ string constant x="replace me please";
+}
 
 contract BytecodeTable {
  //precomputations
-    uint[2][256]  Shamir8;
-    
-    uint immutable a1=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a2=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a3=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a4=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a5=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a6=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a7=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a8=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint immutable a9=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    
    
-   
-   
-  constructor() { 
-    for(uint i=0;i<256;i++)
-     {
-      //Shamir8[i][0]=0xcacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacaca;
-      //Shamir8[i][1]=0x9595959595959595959595959595959595959595959595959595959595959595;
-      
-      Shamir8[i][0]=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-      Shamir8[i][1]=0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-      
-      
-     }
-     
-   
-    
-  }
   
-  function show_myself(address selfe) public
+  function Reader(address selfe) public
   {
     uint[2] memory px;
     
@@ -62,14 +35,133 @@ contract BytecodeTable {
     assembly{
        extcodecopy(selfe, px, offset, 64)
       }
-      console.log("read=",i, px[0], px[1]);
+      console.log("Test on curve of point ",i, px[0], px[1]);
+      console.log(Ec_ZZ.ecAff_isOnCurve(px[0], px[1]));
+  }    
+  }
+}
+
+
+contract Webauthn_prec3{
+
+ address   dataPointer;
+ uint256 public counter;
+  
+  constructor( address Precompute_contract)
+  { 
+	dataPointer=Precompute_contract;
   }
   
   
-      
-  
+
+    function checkSignature_prec(
+        bytes memory authenticatorData,
+        bytes1 authenticatorDataFlagMask,
+        bytes memory clientData,
+        bytes32 clientChallenge,
+        uint clientChallengeDataOffset,
+        uint[2] memory rs       
+    ) public  returns (bool) {
+        // Let the caller check if User Presence (0x01) or User Verification (0x04) are set
+        if (
+            (authenticatorData[32] & authenticatorDataFlagMask) !=
+            authenticatorDataFlagMask
+        ) {
+            revert InvalidAuthenticatorData();
+        }
+        // Verify that clientData commits to the expected client challenge
+        string memory challengeEncoded = Base64URL.encode32(
+            abi.encodePacked(clientChallenge)
+        );
+        bytes memory challengeExtracted = new bytes(
+            bytes(challengeEncoded).length
+        );
+        copyBytes(
+            clientData,
+            clientChallengeDataOffset,
+            challengeExtracted.length,
+            challengeExtracted,
+            0
+        );
+        if (
+            keccak256(abi.encodePacked(bytes(challengeEncoded))) !=
+            keccak256(abi.encodePacked(challengeExtracted))
+        ) {
+            revert InvalidClientData();
+        }      
+        // Verify the signature over sha256(authenticatorData || sha256(clientData))
+        bytes memory verifyData = new bytes(authenticatorData.length + 32);
+        copyBytes(
+            authenticatorData,
+            0,
+            authenticatorData.length,
+            verifyData,
+            0
+        );
+        copyBytes(
+            abi.encodePacked(sha256(clientData)),
+            0,
+            32,
+            verifyData,
+            authenticatorData.length
+        );
+        bytes32 message = sha256(verifyData);
+	bool result=Ec_ZZ.validateSignature_Precomputed_extcode(message, rs,  dataPointer);
+	console.log("result= %s", result);
+
+        return result;
+    }
     
-  }
+ function validate_prec(
+        bytes memory authenticatorData,
+        bytes1 authenticatorDataFlagMask,
+        bytes memory clientData,
+        bytes32 clientChallenge,
+        uint clientChallengeDataOffset,
+        uint[2] memory rs
+       
+    ) public {
+        if (
+            !checkSignature_prec(
+                authenticatorData,
+                authenticatorDataFlagMask,
+                clientData,
+                clientChallenge,
+                clientChallengeDataOffset,
+                rs              
+            )
+        ) {
+            revert InvalidSignature();
+        }
+        counter++;
+    }
+    
+    
+    function copyBytes(
+        bytes memory _from,
+        uint _fromOffset,
+        uint _length,
+        bytes memory _to,
+        uint _toOffset
+    ) internal pure returns (bytes memory _copiedBytes) {
+        uint minLength = _length + _toOffset;
+        require(_to.length >= minLength); // Buffer too small. Should be a better way?
+        uint i = 32 + _fromOffset; // NOTE: the offset 32 is added to skip the `size` field of both bytes variables
+        uint j = 32 + _toOffset;
+        while (i < (32 + _fromOffset + _length)) {
+            assembly {
+                let tmp := mload(add(_from, i))
+                mstore(add(_to, j), tmp)
+            }
+            i += 32;
+            j += 32;
+        }
+        return _to;
+    }
+
+
+
+  
 }
 
 
