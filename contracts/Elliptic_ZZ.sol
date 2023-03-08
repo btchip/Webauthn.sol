@@ -126,18 +126,32 @@ library Ec_ZZ {
      unchecked{
      //use output as temporary to reduce RAM usage
      P0=mulmod(2, y, p); //U = 2*Y1
-     P2=mulmod(P0,P0,p); // V=U^2
-     P3=mulmod(x, P2,p); // S = X1*V
-     P1=mulmod(P0, P2,p); // W=UV
+   
+     
+     //P2=mulmod(P0,P0,p); // V=U^2
+     assembly{
+      P2:=mulmod(P0,P0,p)
+      P3:=mulmod(x, P2,p)// S = X1*V
+      P1:=mulmod(P0, P2,p) // W=UV
+      P2:=mulmod(P2, zz, p) //zz3=V*ZZ1
+     
+     }
+     
+     //P3=mulmod(x, P2,p); // S = X1*V
+     //P1=mulmod(P0, P2,p); // W=UV
     
-     P2=mulmod(P2, zz, p); //zz3=V*ZZ1
+   //  P2=mulmod(P2, zz, p); //zz3=V*ZZ1
      
      zz=mulmod(addmod(x,p-zz,p), addmod(x,zz,p),p);//M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage
-     zz=mulmod(3,zz, p);//M
+     
+    
+     assembly{
+      zz:=mulmod(3,zz, p)//M
+     }
      P0=addmod(mulmod(zz,zz,p), mulmod(minus_2, P3,p),p);//X3=M^2-2S
      
-     P3=addmod(P3, p-P0,p);//S-X3
-     x=mulmod(zz,P3,p);//M(S-X3)
+    // P3=addmod(P3, p-P0,p);//S-X3
+     x=mulmod(zz,addmod(P3, p-P0,p),p);//M(S-X3)
      P3=mulmod(P1,zzz,p);//zzz3=W*zzz1
 
      P1=addmod(x, p-mulmod(P1, y,p),p );//Y3= M(S-X3)-W*Y1
@@ -160,21 +174,34 @@ library Ec_ZZ {
         uint x2,
         uint y2) internal pure returns (uint P0, uint P1,uint P2,uint P3)
      {
+       unchecked{
       if(y1==0){
        return (x2,y2,1,1);
       }
-     unchecked{
-      y1=p-y1;//-Y1
+   
+     // y1=p-y1;//-Y1
       //U2 = X2*ZZ1
-      x2=mulmod(x2, zz1,p);
+      //x2=mulmod(x2, zz1,p);
       //S2 = Y2*ZZZ1, y2 free
-      y2=mulmod(y2, zzz1,p);
+      //y2=mulmod(y2, zzz1,p);
       //R = S2-Y1
-      y2=addmod(y2,y1,p);
+      //y2=addmod(mulmod(y2, zzz1,p),y1,p);
       //P = U2-X1
-      x2=addmod(x2,p-x1,p);
+      //x2=addmod(mulmod(x2, zz1,p),p-x1,p);
      
-      
+        assembly{
+      y1:=sub(p, y1)
+      y2:=addmod(mulmod(y2, zzz1,p),y1,p)  
+      x2:=addmod(mulmod(x2, zz1,p),sub(p,x1),p)  
+      P0:=mulmod(x2, x2, p)
+      P1:=mulmod(P0,x2,p)
+      P2:=mulmod(zz1,P0,p) // W=UV
+      P3:= mulmod(zzz1,P1,p) //zz3=V*ZZ1
+      zz1:=mulmod(x1, P0, p)
+      P0:=addmod(addmod(mulmod(y2,y2, p), sub(p,P1),p ), mulmod(minus_2, zz1,p) ,p )
+      P1:=addmod(mulmod(addmod(zz1, sub(p,P0),p), y2, p), mulmod(y1, P1,p),p)
+     }
+     /*
       P0=mulmod(x2, x2, p);//PP = P^2
      
       P1=mulmod(P0,x2,p); //PPP = P*PP
@@ -182,15 +209,16 @@ library Ec_ZZ {
       P2=mulmod(zz1,P0,p); //ZZ3 = ZZ1*PP
      
       P3= mulmod(zzz1,P1,p); //ZZZ3 = ZZZ1*PPP
-     
+ 
       zz1=mulmod(x1, P0, p);  //Q = X1*PP, x1 free
+          */
       //X3 = R^2-PPP-2*Q
-      P0= addmod(mulmod(y2,y2, p), p-P1,p ); //R^2-PPP
-      zzz1=mulmod(minus_2, zz1,p);//-2*Q
-      P0=addmod(P0, zzz1 ,p );//R^2-PPP-2*Q
+      //P0= addmod(mulmod(y2,y2, p), p-P1,p ); //R^2-PPP
+      //zzz1=mulmod(minus_2, zz1,p);//-2*Q
+      //P0=addmod(addmod(mulmod(y2,y2, p), p-P1,p ), mulmod(minus_2, zz1,p) ,p );//R^2-PPP-2*Q
       //Y3 = R*(Q-X3)-Y1*PPP
-      x1= mulmod(addmod(zz1, p-P0,p), y2, p);//R*(Q-X3)
-      P1=addmod(x1, mulmod(y1, P1,p),p)  ;
+      //x1= mulmod(addmod(zz1, p-P0,p), y2, p);//R*(Q-X3)
+      //P1=addmod(mulmod(addmod(zz1, p-P0,p), y2, p), mulmod(y1, P1,p),p)  ;
       }
       return (P0, P1, P2, P3);
      }
@@ -998,7 +1026,8 @@ library Ec_ZZ {
       // the external tool to generate tables from public key is in the /sage directory
     function ecZZ_mulmuladd_S8_extcode(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint[2] memory  P)
     {
-      uint index;uint zzz;uint zz;
+      uint index;
+      uint zzz;uint zz; // third and fourth coordinates of the point
       
       index=255;
       uint[4] memory R;//R[0] store zz coordinates, R[2] is used as intermediary to avoid too deep stack
@@ -1023,13 +1052,16 @@ library Ec_ZZ {
       {
        (P[0],P[1],zz, zzz)=ecZZ_Dbl(  P[0],P[1],zz, zzz); 
        
+       //the outer x64 is to obtain the offset, code is ugly but we want to spare gas at maximum
+       /*R[1]=64*(128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1));
+       */
        
-       R[1]=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
-               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
+          //incorporating offset with the chunk number
+          R[1]=(8192*((scalar_v>>index)&1)+4096*((scalar_v>>(index-64))&1)+2048*((scalar_v>>(index-128))&1)+1024*((scalar_v>>(index-192))&1)+
+               512*((scalar_u>>index)&1)+256*((scalar_u>>(index-64))&1)+128*((scalar_u>>(index-128))&1)+64*((scalar_u>>(index-192))&1));
+    
        
-       
-       
-       R[1]=R[1]*64;
         assembly{
           extcodecopy(dataPointer, add(R, 64), mload(add(R,32)), 64)
           
