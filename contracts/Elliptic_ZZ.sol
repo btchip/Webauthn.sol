@@ -998,39 +998,52 @@ library Ec_ZZ {
       // the external tool to generate tables from public key is in the /sage directory
     function ecZZ_mulmuladd_S8_extcode(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint[2] memory  P)
     {
-      uint octobit;uint index;uint py;
+      uint index;uint zzz;uint zz;
       
       index=255;
-      uint[2] memory R;//R[2] is used as intermediary to avoid too deep stack
+      uint[4] memory R;//R[0] store zz coordinates, R[2] is used as intermediary to avoid too deep stack
       unchecked{ 
       
       //tbd case of msb octobit is null
       
-      octobit=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+      R[1]=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
                8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
       
         
-             
+      R[1]=R[1]*64;       
       //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
-      (P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
-      
-      (R[0], R[1])= (1,1);
+      //(P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
+       assembly{
+      extcodecopy(dataPointer, P, mload(add(R,32)), 64)
+      }
+      (zz, zzz)= (1,1);
       
       //loop over 1/4 of scalars
       for(index=254; index>=192; index--)
       {
-       (P[0],P[1],R[0], R[1])=ecZZ_Dbl(  P[0],P[1],R[0], R[1]); 
+       (P[0],P[1],zz, zzz)=ecZZ_Dbl(  P[0],P[1],zz, zzz); 
        
-       octobit=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+       
+       R[1]=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
                8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
-               
-      
+       
+       
+       
+       R[1]=R[1]*64;
+        assembly{
+          extcodecopy(dataPointer, add(R, 64), mload(add(R,32)), 64)
+          
+        }
+       (P[0],P[1],zz, zzz)=ecZZ_AddN(   P[0],P[1],zz, zzz, R[2],   R[3]  );
+       
+       /*        
        (octobit,py)=ecZZ_ReadExt(dataPointer, octobit);
       
       
-        (P[0],P[1],R[0], R[1])=ecZZ_AddN(   P[0],P[1],R[0], R[1], octobit,   py  ); 
+        (P[0],P[1],R[0], R[1])=ecZZ_AddN(   P[0],P[1],R[0], R[1], octobit,   py  ); */
+        
       }
-      (P[0],P[1])=ecZZ_SetAff(P[0],P[1],R[0], R[1]);
+      (P[0],P[1])=ecZZ_SetAff(P[0],P[1],zz, zzz);
     
       }
     }
