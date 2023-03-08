@@ -1,6 +1,8 @@
 const { expect } = require("chai");
 const crypto = require("crypto");
 
+const {precompute} = require("./precomputed");
+
 function derToRS(der) {
   var offset = 3;
   var dataOffset;
@@ -27,9 +29,36 @@ function derToRS(der) {
 describe("Webauthn", function() {
 
   it("Check message", async function() {
+    
+console.log("\n***************************************** \n Validating SSTORE 2 writing \n*****************************************" );
+
+const precomputations_buff = Buffer.from(precompute, "hex");
   
   
+ console.log("prec buff:",precomputations_buff);
   
+  
+console.log("length:",precomputations_buff.length);
+ 
+const wo_core = await ethers.getContractFactory("Webauthn_prec2");
+
+const wo = await wo_core.deploy(precomputations_buff);
+
+
+console.log("\n***************************************** \n Direct table adressing \n*****************************************" );
+
+
+const wo_table = await ethers.getContractFactory("BytecodeTable");
+const deployed = await wo_table.deploy();
+await deployed.deployed();
+
+ console.log(
+    `table contract deployed to  ${deployed.address}`
+  );
+
+
+ const result_show = await deployed.show_myself(deployed.address);
+
 console.log("\n***************************************** \n Validating ECDSA Core verification \n*****************************************" );
   /* I Validation of Core ecdsa verification (no webauthn encoding) without precomputations */
   
@@ -131,9 +160,9 @@ console.log("Signature parsed:", signatureParsed);
 //uncomment for with precomputation validation
     
     
-
-console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations \n*****************************************" );    
-  /* III Validation of Webauthn verification without precomputations */
+/*
+console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations in memory \n*****************************************" );    
+  
       const Webauthn_prec = await ethers.getContractFactory("Webauthn_prec");
    
     const webauthn_prec = await Webauthn_prec.deploy([ ethers.BigNumber.from("0x" + publicKey.slice(0, 32).toString('hex')), ethers.BigNumber.from("0x" + publicKey.slice(32).toString('hex'))]);
@@ -149,6 +178,34 @@ console.log("\n***************************************** \n Validating WebAuthn 
     );
     
  await result2.wait();
+    
+*/
+
+console.log("\n***************************************** \n Validating WebAuthn with XYZZ coordinates and Precomputations in precomputed contract \n*****************************************" );    
+  /* III Validation of Webauthn verification with precomputations */
+  
+  
+  
+ console.log("prec buff:",precomputations_buff);
+  
+  
+console.log("length:",precomputations_buff.length);
+ 
+const wo_core2 = await ethers.getContractFactory("Webauthn_prec2");
+
+const wo2 = await wo_core.deploy(precomputations_buff);
+
+
+      
+      
+ 
+      const result3 = await wo.validate_prec(authenticatorData, 0x01, clientData, clientChallenge, challengeOffset,
+        [ ethers.BigNumber.from("0x" + signatureParsed[0].toString('hex')), ethers.BigNumber.from("0x" + signatureParsed[1].toString('hex'))]
+        
+    );
+    
+ await result3.wait();
+        
     
   })
 });

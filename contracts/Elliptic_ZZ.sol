@@ -18,6 +18,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {Base64URL} from "./Base64URL.sol";
+import  "solmate/src/utils/SSTORE2.sol";
  import "hardhat/console.sol";
 
 library Ec_ZZ {
@@ -917,8 +919,62 @@ library Ec_ZZ {
       (x,y)=ecZZ_SetAff(x,y,R[0], R[1]);
     
       }
-      
+    }
     
+    function ecZZ_ReadPrec(address dataPointer, uint numpoint) internal returns (uint x, uint y)
+    {
+       bytes memory ec_point=new bytes(64);
+         unchecked{ 
+        ec_point=SSTORE2.read(dataPointer, 64*numpoint, 64*numpoint+64);
+        assembly{
+        x:=mload(add(ec_point,32)) //store Px of lookup point
+        y:=mload(add(ec_point,64))
+      }
+    }
+      
+    }
+    
+      //8 dimensions Shamir's trick, using precomputations stored in Shamir8,  stored as Bytecode of an external
+      //contract at given address dataPointer
+      //(thx to Lakhdar https://github.com/Kelvyne for EVM storage explanations and tricks)
+      // the external tool to generate tables from public key is in the /sage directory
+    function ecZZ_mulmuladd_S8_ss2(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint[2] memory  P)
+    {
+      uint octobit;uint index;uint py;
+      
+      index=255;
+      uint[2] memory R;//R[2] is used as intermediary to avoid too deep stack
+      unchecked{ 
+      
+      //tbd case of msb octobit is null
+      
+      octobit=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
+      
+        
+             
+      //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
+      (P[0],P[1])=ecZZ_ReadPrec(dataPointer, octobit);
+      
+      (R[0], R[1])= (1,1);
+      
+      //loop over 1/4 of scalars
+      for(index=254; index>=192; index--)
+      {
+       (P[0],P[1],R[0], R[1])=ecZZ_Dbl(  P[0],P[1],R[0], R[1]); 
+       
+       octobit=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
+               
+      
+       (octobit,py)=ecZZ_ReadPrec(dataPointer, octobit);
+      
+      
+        (P[0],P[1],R[0], R[1])=ecZZ_AddN(   P[0],P[1],R[0], R[1], octobit,   py  ); 
+      }
+      (P[0],P[1])=ecZZ_SetAff(P[0],P[1],R[0], R[1]);
+    
+      }
     }
     
     /**
@@ -1071,6 +1127,7 @@ library Ec_ZZ {
         
     }
     
+     /* validating signatures using a precomputed table of multiples of P and Q stored in Shamir8*/
      function validateSignature_Precomputed(
         bytes32 message,
         uint[2] memory rs,
@@ -1082,6 +1139,8 @@ library Ec_ZZ {
        uint[2] memory Q;
        Q[0]=Shamir8[4][0];//extract Q from Shamir8
        Q[1]=Shamir8[4][1];
+       
+      
      if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
             return false;
         }
@@ -1110,5 +1169,47 @@ library Ec_ZZ {
  	//uint Px=NormalizedX(P[0], P[1], P[2]);
  	
         return x1 % n == rs[0];
-        } 
+        }
+        
+        
+        /* validating signatures using a precomputed table of multiples of P and Q stored in contract at address Shamir8*/
+  
+         function validateSignature_Precomputed_ss2(
+        bytes32 message,
+        uint[2] memory rs,
+        address Shamir8
+    ) internal  returns (bool) {
+    
+    
+    
+      
+       
+     if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
+            return false;
+        }
+        /* tbd or not: check Q
+        if (!isOnCurve(Q[0], Q[1])) {
+            return false;
+        }
+	*/  	
+      
+
+        uint sInv = inverseMod(rs[1], n);
+        uint scalar_u=mulmod(uint(message), sInv, n);
+        uint scalar_v= mulmod(rs[0], sInv, n);
+ 	uint[2] memory P;
+     
+	      
+        //test_ecZZ_formulae();
+     
+       //Shamir 8 dimensions
+        P=ecZZ_mulmuladd_S8_ss2(scalar_u, scalar_v, Shamir8);
+       	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",P[0]);
+	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
+ 	//uint Px=NormalizedX(P[0], P[1], P[2]);
+ 	
+        return P[0] % n == rs[0];
+        }
+        
+  
 }
