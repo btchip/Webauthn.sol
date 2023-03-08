@@ -134,7 +134,12 @@ library Ec_ZZ {
       P3:=mulmod(x, P2,p)// S = X1*V
       P1:=mulmod(P0, P2,p) // W=UV
       P2:=mulmod(P2, zz, p) //zz3=V*ZZ1
-     
+      zz:=mulmod(3, mulmod(addmod(x,sub(p,zz),p), addmod(x,zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage
+      P0:=addmod(mulmod(zz,zz,p), mulmod(minus_2, P3,p),p) //X3=M^2-2S
+      x:=mulmod(zz,addmod(P3, sub(p,P0),p),p)//M(S-X3)
+      P3:=mulmod(P1,zzz,p)//zzz3=W*zzz1
+      P1:=addmod(x, sub(p, mulmod(P1, y,p)),p )//Y3= M(S-X3)-W*Y1
+    
      }
      
      //P3=mulmod(x, P2,p); // S = X1*V
@@ -142,19 +147,17 @@ library Ec_ZZ {
     
    //  P2=mulmod(P2, zz, p); //zz3=V*ZZ1
      
-     zz=mulmod(addmod(x,p-zz,p), addmod(x,zz,p),p);//M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage
+     //zz=mulmod(addmod(x,p-zz,p), addmod(x,zz,p),p);//M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage
      
     
-     assembly{
-      zz:=mulmod(3,zz, p)//M
-     }
-     P0=addmod(mulmod(zz,zz,p), mulmod(minus_2, P3,p),p);//X3=M^2-2S
+    
+   //  P0=addmod(mulmod(zz,zz,p), mulmod(minus_2, P3,p),p);//X3=M^2-2S
      
     // P3=addmod(P3, p-P0,p);//S-X3
-     x=mulmod(zz,addmod(P3, p-P0,p),p);//M(S-X3)
-     P3=mulmod(P1,zzz,p);//zzz3=W*zzz1
+    // x=mulmod(zz,addmod(P3, p-P0,p),p);//M(S-X3)
+    // P3=mulmod(P1,zzz,p);//zzz3=W*zzz1
 
-     P1=addmod(x, p-mulmod(P1, y,p),p );//Y3= M(S-X3)-W*Y1
+    // P1=addmod(x, p-mulmod(P1, y,p),p );//Y3= M(S-X3)-W*Y1
      }
      
      return (P0, P1, P2, P3);
