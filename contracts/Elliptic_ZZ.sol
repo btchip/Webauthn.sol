@@ -125,12 +125,13 @@ library Ec_ZZ {
     {
      unchecked{
      //use output as temporary to reduce RAM usage
-     P0=mulmod(2, y, p); //U = 2*Y1
+     //P0=mulmod(2, y, p); //U = 2*Y1
    
      
      //P2=mulmod(P0,P0,p); // V=U^2
      assembly{
-      P2:=mulmod(P0,P0,p)
+      P0:=mulmod(2, y, p) //U = 2*Y1
+      P2:=mulmod(P0,P0,p)  // V=U^2
       P3:=mulmod(x, P2,p)// S = X1*V
       P1:=mulmod(P0, P2,p) // W=UV
       P2:=mulmod(P2, zz, p) //zz3=V*ZZ1
@@ -1023,6 +1024,10 @@ library Ec_ZZ {
       }  
     }
     
+    
+ 
+    
+    
       //8 dimensions Shamir's trick, using precomputations stored in Shamir8,  stored as Bytecode of an external
       //contract at given address dataPointer
       //(thx to Lakhdar https://github.com/Kelvyne for EVM storage explanations and tricks)
@@ -1031,29 +1036,47 @@ library Ec_ZZ {
     {
       uint index;
       uint zzz;uint zz; // third and fourth coordinates of the point
-      
+     
       index=255;
-      uint[4] memory R;//R[0] store zz coordinates, R[2] is used as intermediary to avoid too deep stack
+      uint[5] memory T;
+      
       unchecked{ 
       
       //tbd case of msb octobit is null
       
-      R[1]=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
+      T[0]=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
                8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
       
         
-      R[1]=R[1]*64;       
+      T[0]=T[0]*64;       
       //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
       //(P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
        assembly{
-      extcodecopy(dataPointer, P, mload(add(R,32)), 64)
+      extcodecopy(dataPointer, P, mload(T), 64)
       }
       (zz, zzz)= (1,1);
       
       //loop over 1/4 of scalars
       for(index=254; index>=192; index--)
       {
-       (P[0],P[1],zz, zzz)=ecZZ_Dbl(  P[0],P[1],zz, zzz); 
+       //(P[0],P[1],zz, zzz)=ecZZ_Dbl(  P[0],P[1],zz, zzz); 
+       
+      //inlining the ecZZ_Dbl , welcome to the carroussel
+      
+      assembly{
+       
+       let y:=mulmod(2, mload(add(P,32)), p) //U = 2*Y1, y free
+       let T2:=mulmod(y,y,p)  // V=U^2
+       let T3:=mulmod(mload(P), T2,p)// S = X1*V
+       let T1:=mulmod(y, T2,p) // W=UV
+       
+       let T4:=mulmod(3, mulmod(addmod(mload(P),sub(p,zz),p), addmod(mload(P),zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
+       mstore(P, addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p)) //X3=M^2-2S
+       y:=mulmod(T4,addmod(T3, sub(p, mload(P)),p),p)//M(S-X3)
+       zzz:=mulmod(T1,zzz,p)//zzz3=W*zzz1
+       mstore(add(P,32) , addmod(y, sub(p, mulmod(T1, mload(add(P,32)) ,p)),p ))//Y3= M(S-X3)-W*Y1
+       zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
+       }
        
        //the outer x64 is to obtain the offset, code is ugly but we want to spare gas at maximum
        /*R[1]=64*(128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
@@ -1061,15 +1084,15 @@ library Ec_ZZ {
        */
        
           //incorporating offset with the chunk number
-          R[1]=(8192*((scalar_v>>index)&1)+4096*((scalar_v>>(index-64))&1)+2048*((scalar_v>>(index-128))&1)+1024*((scalar_v>>(index-192))&1)+
+          T[0]=(8192*((scalar_v>>index)&1)+4096*((scalar_v>>(index-64))&1)+2048*((scalar_v>>(index-128))&1)+1024*((scalar_v>>(index-192))&1)+
                512*((scalar_u>>index)&1)+256*((scalar_u>>(index-64))&1)+128*((scalar_u>>(index-128))&1)+64*((scalar_u>>(index-192))&1));
     
        
         assembly{
-          extcodecopy(dataPointer, add(R, 64), mload(add(R,32)), 64)
+          extcodecopy(dataPointer, T,mload(T), 64)
           
         }
-       (P[0],P[1],zz, zzz)=ecZZ_AddN(   P[0],P[1],zz, zzz, R[2],   R[3]  );
+       (P[0],P[1],zz, zzz)=ecZZ_AddN(   P[0],P[1],zz, zzz, T[0],   T[1]  );
        
        /*        
        (octobit,py)=ecZZ_ReadExt(dataPointer, octobit);
