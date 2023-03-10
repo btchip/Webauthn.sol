@@ -1032,7 +1032,6 @@ library Ec_ZZ {
       T[0]=128*((scalar_v>>zz)&1)+64*((scalar_v>>(zz-64))&1)+32*((scalar_v>>(zz-128))&1)+16*((scalar_v>>(zz-192))&1)+
                8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+((scalar_u>>(zz-192))&1);
       
-        
       T[0]=T[0]*64;       
       //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
       //(P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
@@ -1048,7 +1047,7 @@ library Ec_ZZ {
       for { let index := 254 } gt(index, 191) { index := sub(index, 1) } 
       { 
       let ind:=index
-      // inlined Ec_Dbl
+      // inlined EcZZ_Dbl
       let y:=mulmod(2, Y, p) //U = 2*Y1, y free
       let T2:=mulmod(y,y,p)  // V=U^2
       let T3:=mulmod(X, T2,p)// S = X1*V
@@ -1071,11 +1070,13 @@ library Ec_ZZ {
       ind:=sub(index, 192)
       T4:=add(T4,add( shl(10, and(shr(ind, scalar_v),1)), shl(6, and(shr(ind, scalar_u),1)) ))
       
+      
+      
       mstore(T,T4)
          /* Access to precomputed table using extcodecopy hack */
       extcodecopy(dataPointer, T,mload(T), 64)
           
-      // inlined Ec_AddN
+      // inlined EcZZ_AddN
       y:=sub(p, Y)
       let y2:=addmod(mulmod(mload(add(T,32)), zzz,p),y,p)  
       T2:=addmod(mulmod(mload(T), zz,p),sub(p,X),p)  
@@ -1086,16 +1087,13 @@ library Ec_ZZ {
       let zz1:=mulmod(X, T4, p)
       T4:=addmod(addmod(mulmod(y2,y2, p), sub(p,T1),p ), mulmod(minus_2, zz1,p) ,p )
       Y:=addmod(mulmod(addmod(zz1, sub(p,T4),p), y2, p), mulmod(y, T1,p),p)
-     
       zz:=T2
-      
       X:=T4
      }//end loop
       mstore(T,zzz)
      }
       
       //(X,Y)=ecZZ_SetAff(X,Y,zz, zzz);
-       
       T[0] = inverseMod(T[0], p); //1/zzz
       assembly{
       //Y:=mulmod(Y,zzz,p)//Y/zzz
@@ -1354,17 +1352,21 @@ library Ec_ZZ {
         uint sInv = inverseMod(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
- 	uint[2] memory P;
+ 	uint X;
      
 	      
        //Shamir 8 dimensions
-        P[0]=ecZZ_mulmuladd_S8_extcode(scalar_u, scalar_v, Shamir8);
-       	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",P[0]);
+        X=ecZZ_mulmuladd_S8_extcode(scalar_u, scalar_v, Shamir8);
+       //	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",X);
 	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
  	//uint Px=NormalizedX(P[0], P[1], P[2]);
  	
- 	
-        return P[0] % n == rs[0];
+	assembly{
+	 X:=addmod(X,sub(n,mload(rs)), n)
+	}
+	 	
+        return X == 0;
+        
         }
     
     
