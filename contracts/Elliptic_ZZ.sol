@@ -1034,18 +1034,16 @@ library Ec_ZZ {
       // the external tool to generate tables from public key is in the /sage directory
     function ecZZ_mulmuladd_S8_extcode(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint[2] memory  P)
     {
-      uint index;
-      uint zzz;uint zz; // third and fourth coordinates of the point
-     
-      index=255;
-      uint[5] memory T;
+uint zzz;uint zz; // third and fourth coordinates of the point
+      
+      zz=255;
+      uint[2] memory T;
       
       unchecked{ 
       
       //tbd case of msb octobit is null
-      
-      T[0]=128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
-               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1);
+      T[0]=128*((scalar_v>>zz)&1)+64*((scalar_v>>(zz-64))&1)+32*((scalar_v>>(zz-128))&1)+16*((scalar_v>>(zz-192))&1)+
+               8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+1*((scalar_u>>(zz-192))&1);
       
         
       T[0]=T[0]*64;       
@@ -1057,49 +1055,65 @@ library Ec_ZZ {
       (zz, zzz)= (1,1);
       
       //loop over 1/4 of scalars
-      for(index=254; index>=192; index--)
+    //  for(index=254; index>=192; index--)
       {
        //(P[0],P[1],zz, zzz)=ecZZ_Dbl(  P[0],P[1],zz, zzz); 
        
       //inlining the ecZZ_Dbl , welcome to the carroussel
       
+      //
+      
       assembly{
+      for { let index := 254 } gt(index, 191) { index := sub(index, 1) } 
+      { 
+      
+      // inlined Ec_Dbl
+      let y:=mulmod(2, mload(add(P,32)), p) //U = 2*Y1, y free
+      let T2:=mulmod(y,y,p)  // V=U^2
+      let T3:=mulmod(mload(P), T2,p)// S = X1*V
+      let T1:=mulmod(y, T2,p) // W=UV
        
-       let y:=mulmod(2, mload(add(P,32)), p) //U = 2*Y1, y free
-       let T2:=mulmod(y,y,p)  // V=U^2
-       let T3:=mulmod(mload(P), T2,p)// S = X1*V
-       let T1:=mulmod(y, T2,p) // W=UV
+      let T4:=mulmod(3, mulmod(addmod(mload(P),sub(p,zz),p), addmod(mload(P),zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
+      mstore(P, addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p)) //X3=M^2-2S
+      y:=mulmod(T4,addmod(T3, sub(p, mload(P)),p),p)//M(S-X3)
+      zzz:=mulmod(T1,zzz,p)//zzz3=W*zzz1
+      mstore(add(P,32) , addmod(y, sub(p, mulmod(T1, mload(add(P,32)) ,p)),p ))//Y3= M(S-X3)-W*Y1
+      zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
        
-       let T4:=mulmod(3, mulmod(addmod(mload(P),sub(p,zz),p), addmod(mload(P),zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
-       mstore(P, addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p)) //X3=M^2-2S
-       y:=mulmod(T4,addmod(T3, sub(p, mload(P)),p),p)//M(S-X3)
-       zzz:=mulmod(T1,zzz,p)//zzz3=W*zzz1
-       mstore(add(P,32) , addmod(y, sub(p, mulmod(T1, mload(add(P,32)) ,p)),p ))//Y3= M(S-X3)-W*Y1
-       zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
-       }
        
-       //the outer x64 is to obtain the offset, code is ugly but we want to spare gas at maximum
-       /*R[1]=64*(128*((scalar_v>>index)&1)+64*((scalar_v>>(index-64))&1)+32*((scalar_v>>(index-128))&1)+16*((scalar_v>>(index-192))&1)+
-               8*((scalar_u>>index)&1)+4*((scalar_u>>(index-64))&1)+2*((scalar_u>>(index-128))&1)+1*((scalar_u>>(index-192))&1));
-       */
-       
-          //incorporating offset with the chunk number
-          T[0]=(8192*((scalar_v>>index)&1)+4096*((scalar_v>>(index-64))&1)+2048*((scalar_v>>(index-128))&1)+1024*((scalar_v>>(index-192))&1)+
-               512*((scalar_u>>index)&1)+256*((scalar_u>>(index-64))&1)+128*((scalar_u>>(index-128))&1)+64*((scalar_u>>(index-192))&1));
     
-       
-        assembly{
-          extcodecopy(dataPointer, T,mload(T), 64)
+         /* compute element to access in precomputed table */
+      let ind:=index
+      let T0:= add( shl(13, and(shr(ind, scalar_v),1)), shl(9, and(shr(ind, scalar_u),1)) )
+      ind:=sub(index, 64)
+      T0:=add(T0, add( shl(12, and(shr(ind, scalar_v),1)), shl(8, and(shr(ind, scalar_u),1)) ))
+      ind:=sub(index, 128)
+      T0:=add(T0,add( shl(11, and(shr(ind, scalar_v),1)), shl(7, and(shr(ind, scalar_u),1)) ))
+      ind:=sub(index, 192)
+      T0:=add(T0,add( shl(10, and(shr(ind, scalar_v),1)), shl(6, and(shr(ind, scalar_u),1)) ))
+      
+      
+         
+      mstore(T,T0)
+         /* Access to precomputed table using extcodecopy hack */
+      extcodecopy(dataPointer, T,mload(T), 64)
           
-        }
-       (P[0],P[1],zz, zzz)=ecZZ_AddN(   P[0],P[1],zz, zzz, T[0],   T[1]  );
-       
-       /*        
-       (octobit,py)=ecZZ_ReadExt(dataPointer, octobit);
+      // inlined Ec_AddN
+      y:=sub(p, mload(add(P,32)))
+      let y2:=addmod(mulmod(mload(add(T,32)), zzz,p),y,p)  
+      T2:=addmod(mulmod(mload(T), zz,p),sub(p,mload(P)),p)  
+      T0:=mulmod(T2, T2, p)
+      T1:=mulmod(T0,T2,p)
+      T2:=mulmod(zz,T0,p) // W=UV
+      zzz:= mulmod(zzz,T1,p) //zz3=V*ZZ1
+      let zz1:=mulmod(mload(P), T0, p)
+      T0:=addmod(addmod(mulmod(y2,y2, p), sub(p,T1),p ), mulmod(minus_2, zz1,p) ,p )
+      mstore(add(P,32),addmod(mulmod(addmod(zz1, sub(p,T0),p), y2, p), mulmod(y, T1,p),p))
+     
+      zz:=T2
       
-      
-        (P[0],P[1],R[0], R[1])=ecZZ_AddN(   P[0],P[1],R[0], R[1], octobit,   py  ); */
-        
+      mstore(P,T0)
+     }}
       }
       (P[0],P[1])=ecZZ_SetAff(P[0],P[1],zz, zzz);
     
