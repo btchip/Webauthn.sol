@@ -50,7 +50,7 @@ library Ec_ZZ {
     /**
      * @dev Inverse of u in the field of modulo m.
      */
-    function inverseMod(uint u, uint m) internal pure returns (uint) {
+    function inverseMod(uint u, uint m) internal  returns (uint) {
         if (u == 0 || u == m || m == 0) return 0;
         if (u > m) u = u % m;
 
@@ -59,17 +59,21 @@ library Ec_ZZ {
         uint r1 = m;
         uint r2 = u;
         uint q;
+        
         unchecked {
             while (r2 != 0) {
+                
                 q = r1 / r2;
                 (t1, t2, r1, r2) = (t2, t1 - int(q) * t2, r2, r1 - q * r2);
+                
             }
 
             if (t1 < 0) return (m - uint(-t1));
-
+	
             return uint(t1);
         }
     }
+
 
     /**
      * @dev Transform affine coordinates into projective coordinates.
@@ -102,7 +106,7 @@ library Ec_ZZ {
     function ecZZ_SetAff( uint x,
         uint y,
         uint zz,
-        uint zzz) internal pure returns (uint x1, uint y1)
+        uint zzz) internal  returns (uint x1, uint y1)
     {
       uint zzzInv = inverseMod(zzz, p); //1/zzz
       y1=mulmod(y,zzzInv,p);//Y/zzz
@@ -235,7 +239,7 @@ library Ec_ZZ {
         uint y1,
         uint x2,
         uint y2
-    ) internal pure returns (uint[3] memory P) {
+    ) internal  returns (uint[3] memory P) {
         uint x;
         uint y;
         unchecked {
@@ -251,7 +255,7 @@ library Ec_ZZ {
         uint x0,
         uint y0,
         uint z0
-    ) internal pure returns (uint x1, uint y1) {
+    ) internal  returns (uint x1, uint y1) {
         uint z0Inv;
         unchecked {
             z0Inv = inverseMod(z0, p);
@@ -260,23 +264,6 @@ library Ec_ZZ {
         }
     }
     
-  /**
-     * @dev Transform from jacobian to affine coordinates.
-     */
-  function ecJAc_SetAff(
-        uint x0,
-        uint y0,
-        uint z0
-    ) internal pure returns (uint x1, uint y1) {
-        uint z0Inv;
-        unchecked {
-            z0Inv = inverseMod(z0, p);
-            uint z0Inv2 = mulmod(z0Inv,z0Inv, p);
-            x1 = mulmod(x0, z0Inv2, p); //x=X/Z^2
-            z0Inv = mulmod(z0Inv2,z0Inv, p);
-            y1 = mulmod(y0, z0Inv, p);//y=X/Z^3
-        }
-    }
 
 
     /**
@@ -492,7 +479,7 @@ library Ec_ZZ {
         uint y0,
         uint x1,
         uint y1
-    ) internal pure returns (uint, uint) {
+    ) internal  returns (uint, uint) {
         uint z0;
 
         (x0, y0, z0) = addProj(x0, y0, 1, x1, y1, 1);
@@ -503,7 +490,7 @@ library Ec_ZZ {
     /**
      * @dev Double an elliptic curve point in affine coordinates.
      */
-    function twice(uint x0, uint y0) internal pure returns (uint, uint) {
+    function twice(uint x0, uint y0) internal  returns (uint, uint) {
         uint z0;
 
         (x0, y0, z0) = twiceProj(x0, y0, 1);
@@ -518,7 +505,7 @@ library Ec_ZZ {
         uint x0,
         uint y0,
         uint exp
-    ) internal pure returns (uint, uint) {
+    ) internal  returns (uint, uint) {
         uint base2X = x0;
         uint base2Y = y0;
         uint base2Z = 1;
@@ -581,7 +568,7 @@ library Ec_ZZ {
         uint x0,
         uint y0,
         uint scalar
-    ) internal pure returns (uint x1, uint y1) {
+    ) internal  returns (uint x1, uint y1) {
         if (scalar == 0) {
             return ecAff_SetZero();
         } 
@@ -624,7 +611,7 @@ library Ec_ZZ {
         return ecZZ_SetAff(x1, y1, zzZZ, zzZZZ);
     }
     
-   function NormalizedX(  uint Gx0, uint Gy0, uint Gz0) internal pure returns(uint px)
+   function NormalizedX(  uint Gx0, uint Gy0, uint Gz0) internal  returns(uint px)
    {
        if (Gz0 == 0) {
             return 0;
@@ -712,7 +699,7 @@ library Ec_ZZ {
         uint Qy0,
         uint scalar_u,
         uint scalar_v
-    ) internal pure  returns (uint[3] memory R) {
+    ) internal   returns (uint[3] memory R) {
 
 	uint[3] memory H;//G+Q
 	(H[0],H[1], H[2] )=addProj(Gx0, Gy0, 1, Qx0, Qy0, 1);
@@ -767,7 +754,7 @@ library Ec_ZZ {
         uint Qy0,
         uint scalar_u,
         uint scalar_v
-    ) internal pure  returns (uint R0, uint R1) {
+    ) internal   returns (uint R0, uint R1) {
      Indexing_t memory Ind;
      
      uint[2] memory R;
@@ -1032,91 +1019,90 @@ library Ec_ZZ {
       //contract at given address dataPointer
       //(thx to Lakhdar https://github.com/Kelvyne for EVM storage explanations and tricks)
       // the external tool to generate tables from public key is in the /sage directory
-    function ecZZ_mulmuladd_S8_extcode(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint[2] memory  P)
+    function ecZZ_mulmuladd_S8_extcode(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint X/*, uint Y*/)
     {
-uint zzz;uint zz; // third and fourth coordinates of the point
-      
-      zz=255;
+      uint zz; // third and fourth coordinates of the point
+     
       uint[2] memory T;
+      zz=255;//start index
       
       unchecked{ 
       
       //tbd case of msb octobit is null
       T[0]=128*((scalar_v>>zz)&1)+64*((scalar_v>>(zz-64))&1)+32*((scalar_v>>(zz-128))&1)+16*((scalar_v>>(zz-192))&1)+
-               8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+1*((scalar_u>>(zz-192))&1);
+               8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+((scalar_u>>(zz-192))&1);
       
         
       T[0]=T[0]*64;       
       //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
       //(P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
        assembly{
-      extcodecopy(dataPointer, P, mload(T), 64)
-      }
-      (zz, zzz)= (1,1);
-      
-      //loop over 1/4 of scalars
-    //  for(index=254; index>=192; index--)
-      {
-       //(P[0],P[1],zz, zzz)=ecZZ_Dbl(  P[0],P[1],zz, zzz); 
-       
-      //inlining the ecZZ_Dbl , welcome to the carroussel
-      
-      //
-      
-      assembly{
+   
+      extcodecopy(dataPointer, T, mload(T), 64)
+      X:= mload(T)
+      let Y:= mload(add(T,32))
+      let zzz:=1
+      zz:=1
+     
+      //loop over 1/4 of scalars thx to Shamir's trick over 8 points
       for { let index := 254 } gt(index, 191) { index := sub(index, 1) } 
       { 
-      
+      let ind:=index
       // inlined Ec_Dbl
-      let y:=mulmod(2, mload(add(P,32)), p) //U = 2*Y1, y free
+      let y:=mulmod(2, Y, p) //U = 2*Y1, y free
       let T2:=mulmod(y,y,p)  // V=U^2
-      let T3:=mulmod(mload(P), T2,p)// S = X1*V
+      let T3:=mulmod(X, T2,p)// S = X1*V
       let T1:=mulmod(y, T2,p) // W=UV
-       
-      let T4:=mulmod(3, mulmod(addmod(mload(P),sub(p,zz),p), addmod(mload(P),zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
-      mstore(P, addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p)) //X3=M^2-2S
-      y:=mulmod(T4,addmod(T3, sub(p, mload(P)),p),p)//M(S-X3)
+      let T4:=mulmod(3, mulmod(addmod(X,sub(p,zz),p), addmod(X,zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
       zzz:=mulmod(T1,zzz,p)//zzz3=W*zzz1
-      mstore(add(P,32) , addmod(y, sub(p, mulmod(T1, mload(add(P,32)) ,p)),p ))//Y3= M(S-X3)-W*Y1
+    
+      X:=addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p) //X3=M^2-2S
+      y:=mulmod(T4,addmod(T3, sub(p, X),p),p)//M(S-X3)
+      Y:= addmod(y, sub(p, mulmod(T1, Y ,p)),p  )//Y3= M(S-X3)-W*Y1
       zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
        
-       
-    
-         /* compute element to access in precomputed table */
-      let ind:=index
-      let T0:= add( shl(13, and(shr(ind, scalar_v),1)), shl(9, and(shr(ind, scalar_u),1)) )
+      /* compute element to access in precomputed table */
+     
+      T4:= add( shl(13, and(shr(ind, scalar_v),1)), shl(9, and(shr(ind, scalar_u),1)) )
       ind:=sub(index, 64)
-      T0:=add(T0, add( shl(12, and(shr(ind, scalar_v),1)), shl(8, and(shr(ind, scalar_u),1)) ))
+      T4:=add(T4, add( shl(12, and(shr(ind, scalar_v),1)), shl(8, and(shr(ind, scalar_u),1)) ))
       ind:=sub(index, 128)
-      T0:=add(T0,add( shl(11, and(shr(ind, scalar_v),1)), shl(7, and(shr(ind, scalar_u),1)) ))
+      T4:=add(T4,add( shl(11, and(shr(ind, scalar_v),1)), shl(7, and(shr(ind, scalar_u),1)) ))
       ind:=sub(index, 192)
-      T0:=add(T0,add( shl(10, and(shr(ind, scalar_v),1)), shl(6, and(shr(ind, scalar_u),1)) ))
+      T4:=add(T4,add( shl(10, and(shr(ind, scalar_v),1)), shl(6, and(shr(ind, scalar_u),1)) ))
       
-      
-         
-      mstore(T,T0)
+      mstore(T,T4)
          /* Access to precomputed table using extcodecopy hack */
       extcodecopy(dataPointer, T,mload(T), 64)
           
       // inlined Ec_AddN
-      y:=sub(p, mload(add(P,32)))
+      y:=sub(p, Y)
       let y2:=addmod(mulmod(mload(add(T,32)), zzz,p),y,p)  
-      T2:=addmod(mulmod(mload(T), zz,p),sub(p,mload(P)),p)  
-      T0:=mulmod(T2, T2, p)
-      T1:=mulmod(T0,T2,p)
-      T2:=mulmod(zz,T0,p) // W=UV
+      T2:=addmod(mulmod(mload(T), zz,p),sub(p,X),p)  
+      T4:=mulmod(T2, T2, p)
+      T1:=mulmod(T4,T2,p)
+      T2:=mulmod(zz,T4,p) // W=UV
       zzz:= mulmod(zzz,T1,p) //zz3=V*ZZ1
-      let zz1:=mulmod(mload(P), T0, p)
-      T0:=addmod(addmod(mulmod(y2,y2, p), sub(p,T1),p ), mulmod(minus_2, zz1,p) ,p )
-      mstore(add(P,32),addmod(mulmod(addmod(zz1, sub(p,T0),p), y2, p), mulmod(y, T1,p),p))
+      let zz1:=mulmod(X, T4, p)
+      T4:=addmod(addmod(mulmod(y2,y2, p), sub(p,T1),p ), mulmod(minus_2, zz1,p) ,p )
+      Y:=addmod(mulmod(addmod(zz1, sub(p,T4),p), y2, p), mulmod(y, T1,p),p)
      
       zz:=T2
       
-      mstore(P,T0)
-     }}
-      }
-      (P[0],P[1])=ecZZ_SetAff(P[0],P[1],zz, zzz);
-    
+      X:=T4
+     }//end loop
+      mstore(T,zzz)
+     }
+      
+      //(X,Y)=ecZZ_SetAff(X,Y,zz, zzz);
+       
+      T[0] = inverseMod(T[0], p); //1/zzz
+      assembly{
+      //Y:=mulmod(Y,zzz,p)//Y/zzz
+      zz :=mulmod(zz, mload(T),p) //1/z
+      zz:= mulmod(zz,zz,p) //1/zz
+      X:=mulmod(X,zz,p)//X/zz
+       }       
       }
     }
     
@@ -1372,10 +1358,11 @@ uint zzz;uint zz; // third and fourth coordinates of the point
      
 	      
        //Shamir 8 dimensions
-        P=ecZZ_mulmuladd_S8_extcode(scalar_u, scalar_v, Shamir8);
+        P[0]=ecZZ_mulmuladd_S8_extcode(scalar_u, scalar_v, Shamir8);
        	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",P[0]);
 	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
  	//uint Px=NormalizedX(P[0], P[1], P[2]);
+ 	
  	
         return P[0] % n == rs[0];
         }
