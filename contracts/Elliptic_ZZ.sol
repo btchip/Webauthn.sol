@@ -42,9 +42,73 @@ library Ec_ZZ {
     //curve order (number of points)
     uint constant n =
         0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;    
-    /* -2 constant, used to speed up doubling (avoid negation)*/
+    /* -2 mod p constant, used to speed up doubling (avoid negation)*/
     uint constant minus_2 = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFD;
+    uint constant minus_2modn = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC63254F;    
+   
     
+    //inversion mod n via a^(n-2)
+    function inverseModn_Hard_back(uint u, uint m) public returns (uint res){
+     unchecked{
+       res=u;
+       
+       for(uint index=0;index<255;index++){
+         
+     	 assembly{
+     	  res:=mulmod(res,res,n)
+     	  let bit:=and(shr(sub(254,index),minus_2modn),1)
+     	  res:=add(mul(res,sub(1,bit)), mul(bit, mulmod(res,u,m)))
+     	 }
+     	}
+    }}	
+    
+    //inversion mod n via a^(n-2), use of precompiled
+    function inverseModn_Hard(uint256 u, uint256 m) public returns (uint256 result) {
+        uint[6] memory pointer;
+        assembly {
+            
+            // Define length of base, exponent and modulus. 0x20 == 32 bytes
+            mstore(pointer, 0x20)
+            mstore(add(pointer, 0x20), 0x20)
+            mstore(add(pointer, 0x40), 0x20)
+            // Define variables base, exponent and modulus
+            mstore(add(pointer, 0x60), u)
+            mstore(add(pointer, 0x80), minus_2modn)
+            mstore(add(pointer, 0xa0), m)
+          
+          
+            // Call the precompiled contract 0x05 = ModExp
+            if iszero(call(not(0), 0x05, 0, pointer, 0xc0, pointer, 0x20)) {
+                revert(0, 0)
+            }
+            result:=mload(pointer)
+        }
+       
+    }
+    
+    //inversion mod n via a^(n-2), use of precompiled
+    function inverseModp_Hard(uint256 u, uint256 m) public returns (uint256 result) {
+        uint[6] memory pointer;
+        assembly {
+            
+            // Define length of base, exponent and modulus. 0x20 == 32 bytes
+            mstore(pointer, 0x20)
+            mstore(add(pointer, 0x20), 0x20)
+            mstore(add(pointer, 0x40), 0x20)
+            // Define variables base, exponent and modulus
+            mstore(add(pointer, 0x60), u)
+            mstore(add(pointer, 0x80), minus_2)
+            mstore(add(pointer, 0xa0), m)
+          
+          
+            // Call the precompiled contract 0x05 = ModExp
+            if iszero(call(not(0), 0x05, 0, pointer, 0xc0, pointer, 0x20)) {
+                revert(0, 0)
+            }
+            result:=mload(pointer)
+        }
+       
+    }
     
     
     /**
@@ -108,7 +172,7 @@ library Ec_ZZ {
         uint zz,
         uint zzz) internal  returns (uint x1, uint y1)
     {
-      uint zzzInv = inverseMod(zzz, p); //1/zzz
+      uint zzzInv = inverseModp_Hard(zzz, p); //1/zzz
       y1=mulmod(y,zzzInv,p);//Y/zzz
       uint b=mulmod(zz, zzzInv,p); //1/z
       zzzInv= mulmod(b,b,p); //1/zz
@@ -1021,21 +1085,20 @@ library Ec_ZZ {
       // the external tool to generate tables from public key is in the /sage directory
     function ecZZ_mulmuladd_S8_extcode(uint scalar_u, uint scalar_v, address dataPointer) internal  returns(uint X/*, uint Y*/)
     {
-      uint zz; // third and fourth coordinates of the point
+      uint zz; // third and  coordinates of the point
      
-      uint[2] memory T;
+      uint[6] memory T;
       zz=255;//start index
       
       unchecked{ 
       
       //tbd case of msb octobit is null
-      T[0]=128*((scalar_v>>zz)&1)+64*((scalar_v>>(zz-64))&1)+32*((scalar_v>>(zz-128))&1)+16*((scalar_v>>(zz-192))&1)+
-               8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+((scalar_u>>(zz-192))&1);
+      T[0]=64*(128*((scalar_v>>zz)&1)+64*((scalar_v>>(zz-64))&1)+32*((scalar_v>>(zz-128))&1)+16*((scalar_v>>(zz-192))&1)+
+               8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+((scalar_u>>(zz-192))&1));
       
-      T[0]=T[0]*64;       
       //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
       //(P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
-       assembly{
+      assembly{
    
       extcodecopy(dataPointer, T, mload(T), 64)
       X:= mload(T)
@@ -1061,7 +1124,6 @@ library Ec_ZZ {
       zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
        
       /* compute element to access in precomputed table */
-     
       T4:= add( shl(13, and(shr(ind, scalar_v),1)), shl(9, and(shr(ind, scalar_u),1)) )
       ind:=sub(index, 64)
       T4:=add(T4, add( shl(12, and(shr(ind, scalar_v),1)), shl(8, and(shr(ind, scalar_u),1)) ))
@@ -1069,8 +1131,6 @@ library Ec_ZZ {
       T4:=add(T4,add( shl(11, and(shr(ind, scalar_v),1)), shl(7, and(shr(ind, scalar_u),1)) ))
       ind:=sub(index, 192)
       T4:=add(T4,add( shl(10, and(shr(ind, scalar_v),1)), shl(6, and(shr(ind, scalar_u),1)) ))
-      
-      
       
       mstore(T,T4)
          /* Access to precomputed table using extcodecopy hack */
@@ -1090,12 +1150,25 @@ library Ec_ZZ {
       zz:=T2
       X:=T4
      }//end loop
-      mstore(T,zzz)
-     }
+      mstore(add(T, 0x60),zzz)
+     
       
       //(X,Y)=ecZZ_SetAff(X,Y,zz, zzz);
-      T[0] = inverseMod(T[0], p); //1/zzz
-      assembly{
+      //T[0] = inverseModp_Hard(T[0], p); //1/zzz, inline modular inversion using precompile:
+     // Define length of base, exponent and modulus. 0x20 == 32 bytes
+      mstore(T, 0x20)
+      mstore(add(T, 0x20), 0x20)
+      mstore(add(T, 0x40), 0x20)
+      // Define variables base, exponent and modulus
+      //mstore(add(pointer, 0x60), u)
+      mstore(add(T, 0x80), minus_2)
+      mstore(add(T, 0xa0), p)
+               
+      // Call the precompiled contract 0x05 = ModExp
+      if iszero(call(not(0), 0x05, 0, T, 0xc0, T, 0x20)) {
+            revert(0, 0)
+      }
+       
       //Y:=mulmod(Y,zzz,p)//Y/zzz
       zz :=mulmod(zz, mload(T),p) //1/z
       zz:= mulmod(zz,zz,p) //1/zz
@@ -1219,7 +1292,7 @@ library Ec_ZZ {
   	
       
 
-        uint sInv = inverseMod(rs[1], n);
+        uint sInv = inverseModn_Hard(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
         
@@ -1277,7 +1350,7 @@ library Ec_ZZ {
 	*/  	
       
 
-        uint sInv = inverseMod(rs[1], n);
+        uint sInv = inverseModn_Hard(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
  	uint x1;
@@ -1349,14 +1422,16 @@ library Ec_ZZ {
         }
 	*/  	
      
-        uint sInv = inverseMod(rs[1], n);
-        uint scalar_u=mulmod(uint(message), sInv, n);
-        uint scalar_v= mulmod(rs[0], sInv, n);
+//        uint sInv = inverseMod(rs[1], n);
+         uint sInv =inverseModn_Hard(rs[1], n);
+        //  console.log("******************************inv=",sInv);
+        //uint scalar_u=mulmod(uint(message), sInv, n);
+        //uint scalar_v= mulmod(rs[0], sInv, n);
  	uint X;
      
 	      
-       //Shamir 8 dimensions
-        X=ecZZ_mulmuladd_S8_extcode(scalar_u, scalar_v, Shamir8);
+       //Shamir 8 dimensions	
+        X=ecZZ_mulmuladd_S8_extcode(mulmod(uint(message), sInv, n), mulmod(rs[0], sInv, n), Shamir8);
        //	console.log("res Shamir 8dim precomputed XYZZ  mulmuladd:",X);
 	//uint[3] memory P = ec_mulmuladd_W(gx, gy, Q[0], Q[1],scalar_u ,scalar_v );
  	//uint Px=NormalizedX(P[0], P[1], P[2]);
@@ -1364,7 +1439,7 @@ library Ec_ZZ {
 	assembly{
 	 X:=addmod(X,sub(n,mload(rs)), n)
 	}
-	 	
+	//return true; 	
         return X == 0;
         
         }
