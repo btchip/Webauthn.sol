@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Base64URL} from "./Base64URL.sol";
-import {Ec_ZZ} from "./Elliptic_ZZ.sol";
+import {FCL_Elliptic_ZZ} from "./FCL_elliptic.sol";
 import "hardhat/console.sol";
 
 
@@ -22,7 +22,7 @@ contract Webauthn {
      console.log("hash=", uint(hash));
     console.log("rs0=", rs[0]);
     
-     bool result=Ec_ZZ.validateSignature(bytes32(hash), rs, Q);
+     bool result=FCL_Elliptic_ZZ.ecdsa_verify(bytes32(hash), rs, Q);
      console.log("result= %s", result);
 
     }
@@ -85,7 +85,8 @@ contract Webauthn {
         console.log("verifyData:", tmp);
         */
         bytes32 message = sha256(verifyData);
-	bool result=Ec_ZZ.validateSignature(message, rs, Q);
+	//bool result=Ec_ZZ.validateSignature(message, rs, Q);
+	bool result=FCL_Elliptic_ZZ.ecdsa_verify(message, rs, Q);
 	console.log("result= %s", result);
 
         return result;

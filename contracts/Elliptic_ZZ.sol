@@ -4,18 +4,40 @@
 // | _| '_/ -_|_-< ' \  | (__| '_| || | '_ \  _/ _ \ | |__| | '_ \
 // |_||_| \___/__/_||_|  \___|_|  \_, | .__/\__\___/ |____|_|_.__/
 //                                |__/|_|                        
-///* Copyright (C) 2022 - Renaud Dubois - This file is part of FCL (Fresh CryptoLib) project */
-///* License: This software is licensed under MIT License 	 */
-///* See LICENSE file at the root folder of the project.				 */
-///* FILE: Elliptic_ZZ.sol						         */
-///* 											 */
-///* 											 */
+///* Copyright (C) 2022 - Renaud Dubois - This file is part of FCL (Fresh CryptoLib) project 
+///* License: This software is licensed under MIT License 	 
+///* This Code may be reused including license and copyright notice. 	 
+///* See LICENSE file at the root folder of the project.				 
+///* FILE: Elliptic_ZZ.sol						         
+///* 											 
+///* 											 
 ///* DESCRIPTION: modified XYZZ system coordinates for EVM elliptic point multiplication
 ///*  optimization
 ///* 
 //**************************************************************************************/
-
+//* WARNING: this code SHALL not be used for non prime order curves for security reasons.
 // SPDX-License-Identifier: MIT
+//Also contain for validating and benchmarking purpose projective curve implementation from
+/**
+ * @title   EllipticCurve
+ *
+ * @author  Tilman Drerup;
+ *
+ * @notice  Implements elliptic curve math; Parametrized for SECP256R1.
+ *
+ *          Includes components of code by Andreas Olofsson, Alexander Vlasov
+ *          (https://github.com/BANKEX/CurveArithmetics), and Avi Asayag
+ *          (https://github.com/orbs-network/elliptic-curve-solidity)
+ *
+ * @dev     NOTE: To disambiguate public keys when verifying signatures, activate
+ *          condition 'rs[1] > lowSmax' in validateSignature().
+ */
+ 
+ // Benchmark results:
+ // ECDSA verification using  Tilman Drerup : 1.1M gas/verification
+ // ECDSA verification using FCL, no precomputation: 290K gas
+ //ECDSA verificaiton using FCL with precomputations: 151K gas
+ 
 pragma solidity ^0.8.0;
 
 import {Base64URL} from "./Base64URL.sol";
@@ -47,7 +69,7 @@ library Ec_ZZ {
     uint constant minus_2modn = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC63254F;    
     uint constant minus_1=      0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     
-    //inversion mod n via a^(n-2)
+    //inversion mod n via a^(n-2) using little Fermat theorem
     function inverseModn_Hard_back(uint u, uint m) public returns (uint res){
      unchecked{
        res=u;
@@ -62,7 +84,7 @@ library Ec_ZZ {
      	}
     }}	
     
-    //inversion mod n via a^(n-2), use of precompiled
+    //inversion mod n via a^(n-2), use of precompiled using little Fermat theorem
     function inverseModn_Hard(uint256 u, uint256 m) public returns (uint256 result) {
         uint[6] memory pointer;
         assembly {
@@ -76,7 +98,6 @@ library Ec_ZZ {
             mstore(add(pointer, 0x80), minus_2modn)
             mstore(add(pointer, 0xa0), m)
           
-          
             // Call the precompiled contract 0x05 = ModExp
             if iszero(call(not(0), 0x05, 0, pointer, 0xc0, pointer, 0x20)) {
                 revert(0, 0)
@@ -86,7 +107,7 @@ library Ec_ZZ {
        
     }
     
-    //inversion mod n via a^(n-2), use of precompiled
+    //inversion mod nusing little Fermat theorem via a^(n-2), use of precompiled
     function inverseModp_Hard(uint256 u, uint256 m) public returns (uint256 result) {
         uint[6] memory pointer;
         assembly {
@@ -359,6 +380,11 @@ library Ec_ZZ {
         return (0, 0);
     }
 
+  function ecAff_IsZero(uint x, uint y) internal pure returns (bool flag) {
+        return (y==0);
+    }
+
+
     /**
      * @dev Check if the curve is the zero curve in affine rep.
      */
@@ -545,11 +571,15 @@ library Ec_ZZ {
         uint x1,
         uint y1
     ) internal  returns (uint, uint) {
-        uint z0;
+        uint zz0;
+        uint zzz0;
+        
+	if(ecAff_IsZero(x0,y0)) return (x1,y1);
+	if(ecAff_IsZero(x1,y1)) return (x1,y1);
+	
+        (x0, y0, zz0, zzz0) = ecZZ_AddN(x0, y0, 1,1, x1, y1);
 
-        (x0, y0, z0) = addProj(x0, y0, 1, x1, y1, 1);
-
-        return toAffinePoint(x0, y0, z0);
+        return ecZZ_SetAff(x0, y0, zz0, zzz0);
     }
 
     /**

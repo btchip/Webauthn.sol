@@ -3,6 +3,9 @@ pragma solidity ^0.8.0;
 
 import {Base64URL} from "./Base64URL.sol";
 import {Ec_ZZ} from "./Elliptic_ZZ.sol";
+
+import {FCL_Elliptic_ZZ} from "./FCL_elliptic.sol";
+
 import "hardhat/console.sol";
 
 import  "solmate/src/utils/SSTORE2.sol";
@@ -35,8 +38,8 @@ contract BytecodeTable {
     assembly{
        extcodecopy(selfe, px, offset, 64)
       }
-      console.log("Test on curve of point ",i, px[0], px[1]);
-      console.log(Ec_ZZ.ecAff_isOnCurve(px[0], px[1]));
+      //console.log("Test on curve of point ",i, px[0], px[1]);
+      //console.log(Ec_ZZ.ecAff_isOnCurve(px[0], px[1]));
   }    
   }
 }
@@ -106,7 +109,7 @@ contract Webauthn_prec3{
             authenticatorData.length
         );
         bytes32 message = sha256(verifyData);
-	bool result=Ec_ZZ.validateSignature_Precomputed_extcode(message, rs,  dataPointer);
+	bool result=FCL_Elliptic_ZZ.ecdsa_precomputed_verify(message, rs,  dataPointer);
 	console.log("result= %s", result);
 
         return result;
