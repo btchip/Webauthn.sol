@@ -45,7 +45,7 @@ library Ec_ZZ {
     /* -2 mod p constant, used to speed up doubling (avoid negation)*/
     uint constant minus_2 = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFD;
     uint constant minus_2modn = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC63254F;    
-   
+    uint constant minus_1=      0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     
     //inversion mod n via a^(n-2)
     function inverseModn_Hard_back(uint u, uint m) public returns (uint res){
@@ -114,6 +114,7 @@ library Ec_ZZ {
     /**
      * @dev Inverse of u in the field of modulo m.
      */
+     /*
     function inverseMod(uint u, uint m) internal  returns (uint) {
         if (u == 0 || u == m || m == 0) return 0;
         if (u > m) u = u % m;
@@ -137,7 +138,7 @@ library Ec_ZZ {
             return uint(t1);
         }
     }
-
+*/
 
     /**
      * @dev Transform affine coordinates into projective coordinates.
@@ -322,7 +323,7 @@ library Ec_ZZ {
     ) internal  returns (uint x1, uint y1) {
         uint z0Inv;
         unchecked {
-            z0Inv = inverseMod(z0, p);
+            z0Inv = inverseModp_Hard(z0, p);
             x1 = mulmod(x0, z0Inv, p);
             y1 = mulmod(y0, z0Inv, p);
         }
@@ -681,7 +682,7 @@ library Ec_ZZ {
             return 0;
         }
 
-        uint Px = inverseMod(Gz0, p);
+        uint Px = inverseModp_Hard(Gz0, p);
         unchecked {
             Px = mulmod(Gx0, Px, p);
         }
@@ -811,6 +812,7 @@ library Ec_ZZ {
       
     }
     
+    
      function ecZZ_mulmuladd_S(
         uint Gx0,
         uint Gy0,
@@ -876,6 +878,132 @@ library Ec_ZZ {
      (R0,R1)=ecZZ_SetAff(R0 ,R1,R[0], R[1]);
       return (R0 ,R1);
     }
+    
+     function ecZZ_mulmuladd_S_asm(
+        uint Q0, uint Q1,// Point G and Q stored in one memory for stack optimization
+        uint scalar_u,
+        uint scalar_v
+    ) internal   returns (uint X) {
+     uint zz;
+     uint zzz;
+     uint Y;
+     uint index=255;
+     uint[6] memory T;
+    
+     
+     if(scalar_u==0 && scalar_v==0) return 0;
+     
+     (T[3], T[4] )=add(gx,gy,Q0, Q1);
+     
+	
+  
+     while( ( ((scalar_u>>index)&1)+2*((scalar_v>>index)&1) ) ==0){
+      index=index-1; 
+     }
+     
+     zz =((scalar_u>>index)&1)+2*((scalar_v>>index)&1);
+     if(zz==1){
+     	 (X,Y) = (gx, gy);
+     }
+     if(zz==2){
+	(X,Y) = (Q0, Q1);
+     }
+     if(zz==3){ 
+  	(X,Y) = (T[3], T[4]);
+     }
+     
+     index=index-1;
+     console.log("index=", index);
+     //index=1<<index;
+     
+     zz=1;
+     zzz=1;
+     unchecked {
+     
+     assembly{
+        for {  index := index } gt( minus_1, index) { index := sub(index, 1) } 
+      { 
+      
+      
+         // inlined EcZZ_Dbl
+      let y:=mulmod(2, Y, p) //U = 2*Y1, y free
+      let T2:=mulmod(y,y,p)  // V=U^2
+      let T3:=mulmod(X, T2,p)// S = X1*V
+      let T1:=mulmod(y, T2,p) // W=UV
+      let T4:=mulmod(3, mulmod(addmod(X,sub(p,zz),p), addmod(X,zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
+      zzz:=mulmod(T1,zzz,p)//zzz3=W*zzz1
+    
+      X:=addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p) //X3=M^2-2S
+      y:=mulmod(T4,addmod(T3, sub(p, X),p),p)//M(S-X3)
+      Y:= addmod(y, sub(p, mulmod(T1, Y ,p)),p  )//Y3= M(S-X3)-W*Y1
+      zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
+     
+      //value of dibit	
+      T4:=add( shl(1, and(shr(index, scalar_v),1)), and(shr(index, scalar_u),1) )
+      
+      if eq(T4,1) {
+      	mstore(T, gx)
+      	mstore(add(T,32) , gy)
+      	}
+      if eq(T4,2) {
+        mstore(T, Q0)
+      	mstore(add(T,32) , Q1)
+      }
+      if eq(T4,3) {
+      	 mstore(T, mload(add(T,96)))
+      	mstore(add(T,32) ,  mload(add(T,128)))
+      	 }
+      if gt(T4,0){
+       // inlined EcZZ_AddN
+      y:=sub(p, Y)
+      let y2:=addmod(mulmod(mload(add(T,32)), zzz,p),y,p)  
+      T2:=addmod(mulmod(mload(T), zz,p),sub(p,X),p)  
+      T4:=mulmod(T2, T2, p)
+      T1:=mulmod(T4,T2,p)
+      T2:=mulmod(zz,T4,p) // W=UV
+      zzz:= mulmod(zzz,T1,p) //zz3=V*ZZ1
+      let zz1:=mulmod(X, T4, p)
+      T4:=addmod(addmod(mulmod(y2,y2, p), sub(p,T1),p ), mulmod(minus_2, zz1,p) ,p )
+      Y:=addmod(mulmod(addmod(zz1, sub(p,T4),p), y2, p), mulmod(y, T1,p),p)
+      zz:=T2
+      X:=T4
+      
+      }
+      
+     	
+     }//end loop
+  
+      mstore(add(T, 0x60),zzz)
+     
+      
+      //(X,Y)=ecZZ_SetAff(X,Y,zz, zzz);
+      //T[0] = inverseModp_Hard(T[0], p); //1/zzz, inline modular inversion using precompile:
+     // Define length of base, exponent and modulus. 0x20 == 32 bytes
+      mstore(T, 0x20)
+      mstore(add(T, 0x20), 0x20)
+      mstore(add(T, 0x40), 0x20)
+      // Define variables base, exponent and modulus
+      //mstore(add(pointer, 0x60), u)
+      mstore(add(T, 0x80), minus_2)
+      mstore(add(T, 0xa0), p)
+               
+      // Call the precompiled contract 0x05 = ModExp
+      if iszero(call(not(0), 0x05, 0, T, 0xc0, T, 0x20)) {
+            revert(0, 0)
+      }
+       
+      //Y:=mulmod(Y,zzz,p)//Y/zzz
+      zz :=mulmod(zz, mload(T),p) //1/z
+      zz:= mulmod(zz,zz,p) //1/zz
+      X:=mulmod(X,zz,p)//X/zz
+      } //end assembly
+     }//end unchecked
+     
+       console.log("index out=", index);
+      return X;
+    }
+    
+    
     
     /**
      * @dev 8 dimensional Shamir/Pippinger, will be done externally, validation purpose only
@@ -1150,7 +1278,7 @@ library Ec_ZZ {
       zz:=T2
       X:=T4
      }//end loop
-      mstore(add(T, 0x60),zzz)
+      mstore(add(T, 0x60),zz)
      
       
       //(X,Y)=ecZZ_SetAff(X,Y,zz, zzz);
@@ -1170,8 +1298,10 @@ library Ec_ZZ {
       }
        
       //Y:=mulmod(Y,zzz,p)//Y/zzz
-      zz :=mulmod(zz, mload(T),p) //1/z
-      zz:= mulmod(zz,zz,p) //1/zz
+      //zz :=mulmod(zz, mload(T),p) //1/z
+      //zz:= mulmod(zz,zz,p) //1/zz
+      
+      zz:=mload(T)
       X:=mulmod(X,zz,p)//X/zz
        }       
       }
@@ -1210,7 +1340,7 @@ library Ec_ZZ {
         
         console.log("Unitary testing Dbl+Add: 3P via ZZ == 3P via Aff ?", P2zz [0]==P2 [0]);
         
-        uint sInv = inverseMod(rs[1], n);
+        uint sInv = inverseModn_Hard(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);	
  	
@@ -1235,7 +1365,7 @@ library Ec_ZZ {
         uint[2] memory rs,
         uint[2] memory Q) internal returns(bool)
      {
-         uint sInv = inverseMod(rs[1], n);
+         uint sInv = inverseModn_Hard(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
         
@@ -1286,6 +1416,8 @@ library Ec_ZZ {
         if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
             return false;
         }
+        
+        
         if (!ecAff_isOnCurve(Q[0], Q[1])) {
             return false;
         }
@@ -1319,11 +1451,15 @@ library Ec_ZZ {
         //Shamir 2 dimensions 
         //(x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
         
-       (x1, y1)=ecZZ_mulmuladd_S(gx, gy, Q[0], Q[1],scalar_u, scalar_v);
+       x1=ecZZ_mulmuladd_S_asm(Q[0], Q[1],scalar_u, scalar_v);
        
-       console.log("res Shamir monobit XYZZ  mulmuladd:",x1);
+       //console.log("res Shamir monobit XYZZ  mulmuladd:",x1);
 	
-        return x1 % n == rs[0];
+        assembly{
+	 x1:=addmod(x1,sub(n,mload(rs)), n)
+	}
+	//return true; 	
+        return x1 == 0;
         
     }
     
@@ -1389,7 +1525,7 @@ library Ec_ZZ {
         }
 	*/  	
      
-        uint sInv = inverseMod(rs[1], n);
+        uint sInv = inverseModn_Hard(rs[1], n);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
  	uint[2] memory P;
