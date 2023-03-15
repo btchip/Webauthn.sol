@@ -21,9 +21,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Base64URL} from "./Base64URL.sol";
-import  "solmate/src/utils/SSTORE2.sol";
-import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 library FCL_Elliptic_ZZ {
     // Set parameters for curve sec256r1.
@@ -196,7 +194,9 @@ library FCL_Elliptic_ZZ {
     function ecZZ_SetZero() internal pure returns (uint x, uint y, uint zz, uint zzz) {
         return (0, 0, 0, 0);
     }
-    
+     /**
+     * @dev Check if point is the neutral of the curve
+     */
     function ecZZ_IsZero (uint x0, uint y0, uint zz0, uint zzz0) internal pure returns (bool)
     {
      if ( (y0 == 0)  ) {
@@ -219,7 +219,7 @@ library FCL_Elliptic_ZZ {
     }
 
     /**
-     * @dev Check if a point in affine coordinates is on the curve.
+     * @dev Check if a point in affine coordinates is on the curve (reject Neutral that is indeed on the curve).
      */
     function ecAff_isOnCurve(uint x, uint y) internal pure returns (bool) {
         if (0 == x || x == p || 0 == y || y == p) {
@@ -227,15 +227,9 @@ library FCL_Elliptic_ZZ {
         }
         unchecked {
             uint LHS = mulmod(y, y, p); // y^2
-            uint RHS = mulmod(mulmod(x, x, p), x, p); // x^3
-
-            if (a != 0) {
-                RHS = addmod(RHS, mulmod(x, a, p), p); // x^3 + a*x
-            }
-            if (b != 0) {
-                RHS = addmod(RHS, b, p); // x^3 + a*x + b
-            }
-
+            uint RHS = addmod(mulmod(mulmod(x, x, p), x, p), mulmod(x, a, p), p); // x^3+ax
+                 RHS = addmod(RHS, b, p); // x^3 + a*x + b
+           
             return LHS == RHS;
         }
     }
@@ -384,17 +378,18 @@ library FCL_Elliptic_ZZ {
       uint zz; // third and  coordinates of the point
      
       uint[6] memory T;
-      zz=255;//start index
+      zz=256;//start index
       
       unchecked{ 
       
+      while(T[0]==0)
+      {
+      zz=zz-1;
       //tbd case of msb octobit is null
       T[0]=64*(128*((scalar_v>>zz)&1)+64*((scalar_v>>(zz-64))&1)+32*((scalar_v>>(zz-128))&1)+16*((scalar_v>>(zz-192))&1)+
                8*((scalar_u>>zz)&1)+4*((scalar_u>>(zz-64))&1)+2*((scalar_u>>(zz-128))&1)+((scalar_u>>(zz-192))&1));
-      
-      //(x,y,R[0], R[1])= (Shamir8[octobit][0],     Shamir8[octobit][1],1,1);
-      //(P[0],P[1])=ecZZ_ReadExt(dataPointer, octobit);
-      assembly{
+      }
+     assembly{
    
       extcodecopy(dataPointer, T, mload(T), 64)
       X:= mload(T)
@@ -511,7 +506,7 @@ library FCL_Elliptic_ZZ {
      if (rs[0] == 0 || rs[0] >= n || rs[1] == 0) {
             return false;
         }
-        /* tbd or not: check Q
+        /* Q is pushed via bytecode assumed to be correct
         if (!isOnCurve(Q[0], Q[1])) {
             return false;
         }*/
