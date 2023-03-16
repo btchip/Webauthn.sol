@@ -51,7 +51,7 @@ library FCL_Elliptic_ZZ {
     
     /**
     /* inversion mod n via a^(n-2), use of precompiled using little Fermat theorem*/
-    function FCL_nModInv(uint256 u, uint256 m) public  returns (uint256 result) {
+    function FCL_nModInv(uint256 u) public  returns (uint256 result) {
         uint[6] memory pointer;
         assembly {
             
@@ -62,7 +62,7 @@ library FCL_Elliptic_ZZ {
             // Define variables base, exponent and modulus
             mstore(add(pointer, 0x60), u)
             mstore(add(pointer, 0x80), minus_2modn)
-            mstore(add(pointer, 0xa0), m)
+            mstore(add(pointer, 0xa0), n)
           
             // Call the precompiled contract 0x05 = ModExp
             if iszero(call(not(0), 0x05, 0, pointer, 0xc0, pointer, 0x20)) {
@@ -74,7 +74,7 @@ library FCL_Elliptic_ZZ {
     }
      /**
     /* @dev inversion mod nusing little Fermat theorem via a^(n-2), use of precompiled*/
-    function FCL_pModInv(uint256 u, uint256 m) public  returns (uint256 result) {
+    function FCL_pModInv(uint256 u) public  returns (uint256 result) {
         uint[6] memory pointer;
         assembly {  
             // Define length of base, exponent and modulus. 0x20 == 32 bytes
@@ -84,7 +84,7 @@ library FCL_Elliptic_ZZ {
             // Define variables base, exponent and modulus
             mstore(add(pointer, 0x60), u)
             mstore(add(pointer, 0x80), minus_2)
-            mstore(add(pointer, 0xa0), m)
+            mstore(add(pointer, 0xa0), p)
           
             // Call the precompiled contract 0x05 = ModExp
             if iszero(call(not(0), 0x05, 0, pointer, 0xc0, pointer, 0x20)) {
@@ -116,7 +116,7 @@ library FCL_Elliptic_ZZ {
         uint zz,
         uint zzz) internal  returns (uint x1, uint y1)
     {
-      uint zzzInv = FCL_pModInv(zzz, p); //1/zzz
+      uint zzzInv = FCL_pModInv(zzz); //1/zzz
       y1=mulmod(y,zzzInv,p);//Y/zzz
       uint b=mulmod(zz, zzzInv,p); //1/z
       zzzInv= mulmod(b,b,p); //1/zz
@@ -268,10 +268,11 @@ library FCL_Elliptic_ZZ {
      uint Y;
      uint index=255;
      uint[6] memory T;
-        
+     uint H0;
+     uint H1;   
      if(scalar_u==0 && scalar_v==0) return 0;
      
-     (T[3], T[4] )=ecAff_add(gx,gy,Q0, Q1);
+     (H0,H1 )=ecAff_add(gx,gy,Q0, Q1);
    
      while( ( ((scalar_u>>index)&1)+2*((scalar_v>>index)&1) ) ==0){
       index=index-1; 
@@ -285,58 +286,67 @@ library FCL_Elliptic_ZZ {
 	(X,Y) = (Q0, Q1);
      }
      if(zz==3){ 
-  	(X,Y) = (T[3], T[4]);
+  	(X,Y) = (H0, H1);
      }
      
      index=index-1;
      
-     zz=1;
-     zzz=1;
      unchecked {
      
      assembly{
+      zz:=1
+      zzz:=1
+      
         for {  index := index } gt( minus_1, index) { index := sub(index, 1) } 
-      { 
+      {
+       
                // inlined EcZZ_Dbl
-      let y:=mulmod(2, Y, p) //U = 2*Y1, y free
-      let T2:=mulmod(y,y,p)  // V=U^2
+      let T1:=mulmod(2, Y, p) //U = 2*Y1, y free
+      let T2:=mulmod(T1,T1,p)  // V=U^2
       let T3:=mulmod(X, T2,p)// S = X1*V
-      let T1:=mulmod(y, T2,p) // W=UV
+      T1:=mulmod(T1, T2,p) // W=UV
       let T4:=mulmod(3, mulmod(addmod(X,sub(p,zz),p), addmod(X,zz,p),p) ,p) //M=3*(X1-ZZ1)*(X1+ZZ1), use zz to reduce RAM usage, x free
       zzz:=mulmod(T1,zzz,p)//zzz3=W*zzz1
-    
-      X:=addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p) //X3=M^2-2S
-      y:=mulmod(T4,addmod(T3, sub(p, X),p),p)//M(S-X3)
-      Y:= addmod(y, sub(p, mulmod(T1, Y ,p)),p  )//Y3= M(S-X3)-W*Y1
-      zz:=mulmod(T2, zz, p) //zz3=V*ZZ1
+      zz:=mulmod(T2, zz, p) //zz3=V*ZZ1, V free
      
+      X:=addmod(mulmod(T4,T4,p), mulmod(minus_2, T3,p),p) //X3=M^2-2S
+      T2:=mulmod(T4,addmod(T3, sub(p, X),p),p)//M(S-X3)
+      //T2:=mulmod(T4,addmod(X, sub(p, T3),p),p)//-M(S-X3)=M(X3-S)
+      
+      Y:= addmod(T2, sub(p, mulmod(T1, Y ,p)),p  )//Y3= M(S-X3)-W*Y1
+      //Y:= addmod(mulmod(T1, Y ,p), y ,p  ) //-Y3=W*Y1-M(S-X3)=W*Y1+M(X3-S)
+      //Y:= addmod(mulmod(T1, Y ,p), sub(p, T2),p  )//-Y3= W*Y1-M(S-X3)
+      
+    
       //value of dibit	
       T4:=add( shl(1, and(shr(index, scalar_v),1)), and(shr(index, scalar_u),1) )
       
       if eq(T4,1) {
-      	mstore(T, gx)
-      	mstore(add(T,32) , gy)
+      	T1:=gx
+      	T2:=gy
       	}
       if eq(T4,2) {
-        mstore(T, Q0)
-      	mstore(add(T,32) , Q1)
+        T1:=Q0
+      	T2:=Q1
       }
       if eq(T4,3) {
-      	 mstore(T, mload(add(T,96)))
-      	mstore(add(T,32) ,  mload(add(T,128)))
+      	 T1:=H0
+      	 T2:= H1
       	 }
       if gt(T4,0){
        // inlined EcZZ_AddN
-      y:=sub(p, Y)
-      let y2:=addmod(mulmod(mload(add(T,32)), zzz,p),y,p)  
-      T2:=addmod(mulmod(mload(T), zz,p),sub(p,X),p)  
-      T4:=mulmod(T2, T2, p)
-      T1:=mulmod(T4,T2,p)
+      T3:=sub(p, Y)
+      //T3:=Y
+      let y2:=addmod(mulmod(T2, zzz,p),T3,p)  
+      T2:=addmod(mulmod(T1, zz,p),sub(p,X),p)  
+      
+      T4:=mulmod(T2, T2, p)//PP
+      T1:=mulmod(T4,T2,p)//PPP
       T2:=mulmod(zz,T4,p) // W=UV
       zzz:= mulmod(zzz,T1,p) //zz3=V*ZZ1
       let zz1:=mulmod(X, T4, p)
       T4:=addmod(addmod(mulmod(y2,y2, p), sub(p,T1),p ), mulmod(minus_2, zz1,p) ,p )
-      Y:=addmod(mulmod(addmod(zz1, sub(p,T4),p), y2, p), mulmod(y, T1,p),p)
+      Y:=addmod(mulmod(addmod(zz1, sub(p,T4),p), y2, p), mulmod(T3, T1,p),p)
       zz:=T2
       X:=T4
             }
@@ -466,7 +476,7 @@ library FCL_Elliptic_ZZ {
     }
             
     /**
-     * @dev Validate combination of message, signature, and public key.
+     * @dev ECDSA verification, given , signature, and public key.
      */
     function ecdsa_verify(
         bytes32 message,
@@ -482,7 +492,7 @@ library FCL_Elliptic_ZZ {
             return false;
         }
   	
-        uint sInv = FCL_nModInv(rs[1], n);
+        uint sInv = FCL_nModInv(rs[1]);
         uint scalar_u=mulmod(uint(message), sInv, n);
         uint scalar_v= mulmod(rs[0], sInv, n);
         uint x1;
@@ -497,7 +507,11 @@ library FCL_Elliptic_ZZ {
         
        }
      
-      /* validating signatures using a precomputed table of multiples of P and Q stored in contract at address Shamir8*/
+      /**
+      * @dev ECDSA verification using a precomputed table of multiples of P and Q stored in contract at address Shamir8
+        generation of contract bytecode for precomputations is done using sagemath code (see sage directory, WebAuthn_precompute.sage)
+      */
+        
       function ecdsa_precomputed_verify(
         bytes32 message,
         uint[2] memory rs,
@@ -511,7 +525,7 @@ library FCL_Elliptic_ZZ {
             return false;
         }*/
         
-        uint sInv =FCL_nModInv(rs[1], n);
+        uint sInv =FCL_nModInv(rs[1]);
      	uint X;
          
        //Shamir 8 dimensions	
