@@ -2,8 +2,10 @@
 pragma solidity ^0.8.0;
 
 import {Base64URL} from "./Base64URL.sol";
-import {EllipticCurve} from "./EllipticCurve.sol";
+import {FCL_Elliptic_ZZ} from "./FCL_elliptic.sol";
 import "hardhat/console.sol";
+
+
 
 error InvalidAuthenticatorData();
 error InvalidClientData();
@@ -12,6 +14,19 @@ error InvalidSignature();
 contract Webauthn {
     uint256 public counter;
 
+    
+    function ecdsa_verif( bytes32 hash,  uint[2] memory rs,
+        uint[2] memory Q)  public  returns (bool)
+    {
+    // bytes32 message = sha256(verifyData);
+     console.log("hash=", uint(hash));
+    console.log("rs0=", rs[0]);
+    
+     bool result=FCL_Elliptic_ZZ.ecdsa_verify(bytes32(hash), rs, Q);
+     console.log("result= %s", result);
+
+    }
+    
     function checkSignature(
         bytes memory authenticatorData,
         bytes1 authenticatorDataFlagMask,
@@ -20,7 +35,7 @@ contract Webauthn {
         uint clientChallengeDataOffset,
         uint[2] memory rs,
         uint[2] memory Q
-    ) public view returns (bool) {
+    ) public  returns (bool) {
         // Let the caller check if User Presence (0x01) or User Verification (0x04) are set
         if (
             (authenticatorData[32] & authenticatorDataFlagMask) !=
@@ -64,9 +79,20 @@ contract Webauthn {
             verifyData,
             authenticatorData.length
         );
+        
+        /*
+        uint8 tmp=verifyData[0];
+        console.log("verifyData:", tmp);
+        */
         bytes32 message = sha256(verifyData);
-        return EllipticCurve.validateSignature(message, rs, Q);
+	//bool result=Ec_ZZ.validateSignature(message, rs, Q);
+	bool result=FCL_Elliptic_ZZ.ecdsa_verify(message, rs, Q);
+	console.log("result= %s", result);
+
+        return result;
     }
+
+
 
     function validate(
         bytes memory authenticatorData,
@@ -93,9 +119,6 @@ contract Webauthn {
         counter++;
     }
 
-    /*
-    The following function has been written by Alex Beregszaszi (@axic), use it under the terms of the MIT license
-  */
     function copyBytes(
         bytes memory _from,
         uint _fromOffset,
